@@ -1,5 +1,6 @@
 #include <ros.h>
 #include <std_msgs/String.h>
+#include <std_msgs/Empty.h>
 
 #include <Arduino.h>
 
@@ -7,13 +8,35 @@ ros::NodeHandle nh;
 
 std_msgs::String str_msg;
 ros::Publisher chatter("chatter", &str_msg);
-
 char hello[13] = "hello world2";
+
+/*To control the rover, Copy and paste the code below into the Arduino software*/
+int E1 = 6; //M1 Speed Control
+int E2 = 5; //M2 Speed Control
+int M1 = 8; //M1 Direction Control
+int M2 = 7; //M2 Direction Control
+
+// start one side of the robot
+void messageCb( const std_msgs::Empty& toggle_msg){
+  analogWrite (E1,255);
+  digitalWrite(M1,LOW);
+}
+
+// subcriber for ping message
+ros::Subscriber<std_msgs::Empty> sub("toggle_led", &messageCb );
+
 
 void setup()
 {
+  // init
   nh.initNode();
+  // advertise
   nh.advertise(chatter);
+  // subscribe
+  nh.subscribe(sub);
+  int i;
+  for(i=5;i<=8;i++)
+  pinMode(i, OUTPUT);
 }
 
 void loop()
@@ -23,6 +46,7 @@ void loop()
   nh.spinOnce();
   delay(1000);
 }
+
 //test
 /*#include <ros.h>
 #include <std_msgs/String.h>
