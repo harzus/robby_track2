@@ -18,23 +18,14 @@ int E2 = 5; //M2 Speed Control
 int M1 = 8; //M1 Direction Control
 int M2 = 7; //M2 Direction Control
 
-// start one side of the robot
-void messageCb( const std_msgs::Empty& toggle_msg){
-//  analogWrite (E1,255);
-//  digitalWrite(M1,LOW);
-}
-
-// subcriber for ping message
-ros::Subscriber<std_msgs::Empty> sub("toggle_led", &messageCb );
-
 // velocity
 geometry_msgs::Twist twist;
 
 // veloctiy callback
 void velocityCallback(const geometry_msgs::Twist& vel)
 {
-  twist.linear = vel.linear;
-  twist.angular = vel.angular;
+  twist = vel;
+//  twist.angular = vel.angular;
 }
 
 // subscriber for velocity
@@ -95,7 +86,7 @@ void loopMotor()
         reverse (leftspeed,rightspeed);
     } else if (twist.angular.z > 1.0) {
         left (leftspeed,rightspeed);
-    } else if (twist.angular.z < 1.0) {
+    } else if (twist.angular.z < -1.0) {
         right (leftspeed,rightspeed);
     } else {
         stop();
@@ -109,8 +100,6 @@ void setup()
   // advertise
   nh.advertise(chatter);
   // subscribe
-  nh.subscribe(sub);
-  // subscribe
   nh.subscribe(velocity_sub);
   setupMotor();
 }
@@ -121,6 +110,6 @@ void loop()
   chatter.publish( &str_msg );
   nh.spinOnce();
   loopMotor();
-  delay(1000);
+  delay(100); // only works with continous pressing
 }
 

@@ -12,6 +12,7 @@
 #define KEYCODE_U 0x41
 #define KEYCODE_D 0x42
 #define KEYCODE_Q 0x71
+#define KEYCODE_SPACE 0x20
 
 int kfd = 0;
 
@@ -95,6 +96,11 @@ void TeleopRobbyTrack::keyLoop()
       case KEYCODE_D:
         ROS_DEBUG("DOWN");
         linear_ = -1.0;
+        dirty = true;
+        break;
+      case KEYCODE_SPACE:
+        linear_ = 0.0;
+        angular_ = 0.0;
         dirty = true;
         break;
     }
