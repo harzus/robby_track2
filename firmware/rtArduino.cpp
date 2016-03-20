@@ -3,10 +3,25 @@
 #include <std_msgs/Empty.h>
 #include <geometry_msgs/Twist.h>
 #include <roscpp/Logger.h>
+#include <tf/tf.h>
+#include <string.h>
+
 
 #include <Arduino.h>
 
 ros::NodeHandle nh;
+
+// will store last time
+unsigned long previousMillis1 = 0;
+unsigned long previousMillis2 = 0;
+// interval1 to do something in milliseconds
+const long interval1 = 100;
+int numIntervals1 = 0;
+bool intervalStarted1;
+// interval2 to do something in milliseconds
+const long interval2 = 300;
+int numIntervals2 = 0;
+bool intervalStarted2;
 
 std_msgs::String str_msg;
 ros::Publisher chatter("chatter", &str_msg);
@@ -25,7 +40,6 @@ geometry_msgs::Twist twist;
 void velocityCallback(const geometry_msgs::Twist& vel)
 {
   twist = vel;
-//  twist.angular = vel.angular;
 }
 
 // subscriber for velocity
@@ -106,10 +120,28 @@ void setup()
 
 void loop()
 {
-  str_msg.data = hello;
-  chatter.publish( &str_msg );
+    // interval
+    unsigned long currentMillis = millis();
+    // 1
+    if (currentMillis - previousMillis1 >= interval1) {
+      previousMillis1 = currentMillis;
+      intervalStarted1 = true;
+      numIntervals1++;
+    }
+    // 2
+    if (currentMillis - previousMillis2 >= interval2) {
+      previousMillis2 = currentMillis;
+      intervalStarted2 = true;
+      numIntervals2++;
+    }
+  if (intervalStarted2) {
+      str_msg.data = hello;
+      chatter.publish( &str_msg );
+  }
   nh.spinOnce();
   loopMotor();
-  delay(100); // only works with continous pressing
+  intervalStarted1 = false;
+  intervalStarted2 = false;
+  delay(1);
 }
 
