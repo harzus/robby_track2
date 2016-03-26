@@ -5,9 +5,7 @@
 #include <roscpp/Logger.h>
 #include <tf/tf.h>
 #include <string.h>
-//#include <sensor_msgs/ChannelFloat32.h>
 #include <rosserial_arduino/Adc.h>
-#include <std_msgs/Float32.h>
 
 #include <Arduino.h>
 
@@ -26,12 +24,6 @@ bool intervalStarted1;
 const long interval2 = 300;
 int numIntervals2 = 0;
 bool intervalStarted2;
-
-std_msgs::String str_msg;
-String outString;
-ros::Publisher chatter("chatter", &str_msg);
-const int msgLen = 3;
-char charMsg[msgLen] = "12";
 
 //To control the rover, Copy and paste the code below into the Arduino software
 int E1 = 6; //M1 Speed Control
@@ -58,21 +50,22 @@ int sensorSwitch2 = 750;
 int sensorcount10 = 0;
 int sensorcount11 = 0;
 long count1 = 0;
+long count1old = 0;
 int sensorcount20 = 0;
 int sensorcount21 = 0;
 long count2 = 0;
+long count2old = 0;
+unsigned long previousMillisVelocity = 0;
+float velocity1 = 0.0; // angular velocity in rpm
+float velocity2 = 0.0; // angular velocity in rpm
 
 // velocity
 geometry_msgs::Twist twist;
+geometry_msgs::Twist twist_msg;
 // velocity sensors
-//sensor_msgs::ChannelFloat32 velocityRaw_msg;
-//ros::Publisher pub_velocityRaw( "velocityRaw", &velocityRaw_msg);
-
-std_msgs::Float32 sonar_msg;
-ros::Publisher pub_sonar("sonar", &sonar_msg);
-
 rosserial_arduino::Adc adc_msg;
 ros::Publisher pub_velocityRaw("velocityRaw", &adc_msg);
+ros::Publisher pub_velocity("velocity", &twist_msg);
 
 // veloctiy callback
 void velocityCallback(const geometry_msgs::Twist& vel)
@@ -191,12 +184,27 @@ void loopSensor() {
     sensorMin2 = rawsensorValue2;
   }
   if (intervalStarted2) {
+      // time
+      unsigned long currentMillisVelocity = millis();
+      // data
       adc_msg.adc0 = sensorMin1;
       adc_msg.adc1 = sensorMax1;
       adc_msg.adc2 = count1;
       adc_msg.adc3 = sensorMin2;
       adc_msg.adc4= sensorMax2;
       adc_msg.adc5 = count2;
+      // velocity
+      unsigned long timeDelta = currentMillisVelocity-previousMillisVelocity;
+      velocity1 = (count1-count1old)/16.0 / timeDelta * 1000.0 * 60.0;
+      velocity2 = (count2-count2old)/16.0 / timeDelta * 1000.0 * 60.0;
+      twist_msg.linear.x = velocity1;
+      twist_msg.linear.y = velocity2;
+      // update
+      previousMillisVelocity = currentMillisVelocity;
+      count1old = count1;
+      count2old = count2;
+      // publish
+      pub_velocity.publish(&twist_msg);
       pub_velocityRaw.publish(&adc_msg);
   }
 }
@@ -207,9 +215,8 @@ void setup()
   // init
   nh.initNode();
   // advertise
-  nh.advertise(chatter);
-  nh.advertise(pub_sonar);
   nh.advertise(pub_velocityRaw);
+  nh.advertise(pub_velocity);
   // subscribe
   nh.subscribe(velocity_sub);
   setupMotor();
@@ -236,12 +243,6 @@ void loop()
   loopSensor();
   // interval 2
   if (intervalStarted2) {
-    str_msg.data =  charMsg;
-    chatter.publish(&str_msg);
-    float sensorReading=2.2;
-    sonar_msg.data = sensorReading;
-    pub_sonar.publish(&sonar_msg);
-     //      nh.logdebug(charMsg);
   }
   nh.spinOnce();
   // end
