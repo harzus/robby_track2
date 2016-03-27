@@ -7,11 +7,11 @@
 #include <string.h>
 #include <rosserial_arduino/Adc.h>
 
+//#include <PID_v1.h>
+
 #include <Arduino.h>
 
 ros::NodeHandle nh;
-
-char debug[]= "debug statements";
 
 // will store last time
 unsigned long previousMillis1 = 0;
@@ -56,8 +56,6 @@ int sensorcount21 = 0;
 long count2 = 0;
 long count2old = 0;
 unsigned long previousMillisVelocity = 0;
-float velocity1 = 0.0; // angular velocity in rpm
-float velocity2 = 0.0; // angular velocity in rpm
 
 // velocity
 geometry_msgs::Twist twist;
@@ -66,6 +64,12 @@ geometry_msgs::Twist twist_msg;
 rosserial_arduino::Adc adc_msg;
 ros::Publisher pub_velocityRaw("velocityRaw", &adc_msg);
 ros::Publisher pub_velocity("velocity", &twist_msg);
+float velocity1 = 0.0; // angular velocity in rpm
+float velocity2 = 0.0; // angular velocity in rpm
+float wheelDiameter = 0.0036; // wheel diameter in [m]
+// PID
+//double Setpoint, Input, Output;
+
 
 // veloctiy callback
 void velocityCallback(const geometry_msgs::Twist& vel)
@@ -197,8 +201,10 @@ void loopSensor() {
       unsigned long timeDelta = currentMillisVelocity-previousMillisVelocity;
       velocity1 = (count1-count1old)/16.0 / timeDelta * 1000.0 * 60.0;
       velocity2 = (count2-count2old)/16.0 / timeDelta * 1000.0 * 60.0;
-      twist_msg.linear.x = velocity1;
-      twist_msg.linear.y = velocity2;
+      twist_msg.linear.x = velocity1 / 60 * wheelDiameter * 3.14159265359 ;// [m/s]
+      twist_msg.linear.y = velocity2 / 60 * wheelDiameter * 3.14159265359 ;// [m/s]
+      twist_msg.angular.x = velocity1; // [rpm]
+      twist_msg.angular.y = velocity2; // [rpm]
       // update
       previousMillisVelocity = currentMillisVelocity;
       count1old = count1;
