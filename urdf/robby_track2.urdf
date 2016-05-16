@@ -3,7 +3,7 @@
   <link name="base_link">
     <visual>
       <geometry>
-        <box size="0.3 0.2 0.1"/>
+        <box size="0.3 0.15 0.05"/>
       </geometry>
     </visual>
   </link>
@@ -11,9 +11,12 @@
   <link name="servo1_base">
     <visual>
       <geometry>
-        <box size="0.03 .02 .01"/>
+        <box size="0.03 0.02 0.05"/>
       </geometry>
-      <origin rpy="0 0 0" xyz="0 0 0.1"/>
+      <origin rpy="0 0 0" xyz="0.1 0 0.05"/>
+      <material name="blue">
+        <color rgba="0 0 .8 1"/>
+      </material>
     </visual>
   </link>
 
@@ -25,17 +28,39 @@
   <link name="servo1_head">
     <visual>
       <geometry>
-        <box size="0.03 .02 .01"/>
+        <box size="0.05 .05 .05"/>
       </geometry>
-      <origin rpy="0 0 0" xyz="0 0 0.01"/>
+      <origin rpy="0 0 0" xyz="0 0 0.05"/>
+      <material name="grey">
+        <color rgba="0.3 0.3 0.3 1"/>
+      </material>
     </visual>
   </link>
 
   <joint name="servo1_base_to_head" type="continuous">
-    <parent link="base_link"/>
+    <parent link="servo1_base"/>
     <child link="servo1_head"/>
-    <origin rpy="0 0 0" xyz="0 0 0.01"/>
+    <origin rpy="0 0 0" xyz="0.1 0 0.05"/>
     <axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="servo2_head">
+    <visual>
+      <geometry>
+        <box size="0.1 .1 .05"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0.05 0 0.0"/>
+      <material name="dark green">
+        <color rgba="0.0 0.3 0.3 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="servo1_to_servo2" type="continuous">
+    <parent link="servo1_head"/>
+    <child link="servo2_head"/>
+    <origin rpy="0 0 0" xyz="0.0 0 0.1"/>
+    <axis xyz="0 1 0"/>
   </joint>
 
 </robot>
