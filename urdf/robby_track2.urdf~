@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<robot name="robby_track2">
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.3 0.2 0.1"/>
+      </geometry>
+    </visual>
+  </link>
+
+  <link name="servo1_base">
+    <visual>
+      <geometry>
+        <box size="0.03 .02 .01"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0.1"/>
+    </visual>
+  </link>
+
+  <joint name="base_to_servo1" type="fixed">
+    <parent link="base_link"/>
+    <child link="servo1_base"/>
+  </joint>
+
+  <link name="servo1_head">
+    <visual>
+      <geometry>
+        <box size="0.03 .02 .01"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0.01"/>
+    </visual>
+  </link>
+
+  <joint name="servo1_base_to_head" type="continous">
+    <parent link="base_link"/>
+    <child link="servo1_head"/>
+    <origin rpy="0 0 0" xyz="0 0 0.01"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+</robot>
