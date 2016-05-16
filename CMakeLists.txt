@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   geometry_msgs
+  sensor_msgs
   message_generation
   tf
   rostime
@@ -209,3 +210,6 @@ rosserial_add_client_target(firmware rtArduino-upload)
 
 add_executable(robby_teleop_key src/teleop_robby_key.cpp)
 target_link_libraries(robby_teleop_key ${catkin_LIBRARIES})
+
+add_executable(rt_state_publisher src/rt_state_publisher.cpp)
+target_link_libraries(rt_state_publisher ${catkin_LIBRARIES})
