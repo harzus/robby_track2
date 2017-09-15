@@ -1,0 +1,7 @@
+<launch>
+
+    <node pkg="robby_track2" name="teleop" type="robby_teleop_key"/>
+    <node pkg="rosserial_python" name="rosserial" type="serial_node.py" args="/dev/ttyACM0"/>
+    <node pkg="rosserial_python" name="rosserial" type="serial_node.py" args="/dev/ttyACM0"/>
+
+</launch>
