@@ -8,5 +8,5 @@ add_definitions(-DUSB_CON)
 generate_arduino_firmware(rtArduino
   SRCS rtArduino.cpp ${ROS_LIB_DIR}/time.cpp
   BOARD uno
-  PORT /dev/ttyACM1
+  PORT /dev/ttyACM0
 )
