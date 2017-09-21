@@ -45,28 +45,40 @@ int sensorMin1 = 1000;
 int sensorMin2 = 1000;
 int sensorMax1 = 0;
 int sensorMax2 = 0;
-int sensorSwitch1 = 700;
-int sensorSwitch2 = 750;
+int sensorSwitch1 = 700; // initial guess for sensor switch
+int sensorSwitch2 = 790; // initial guess for sensor switch
+int sensorSwitchAutomatic = 1e20; // after x sensor counts sensorSwitch1&2 will be the average of sensorMin & sensorMax
 int sensorcount10 = 0;
 int sensorcount11 = 0;
-long count1 = 0;
-long count1old = 0;
+long count1 = 0; // left count of sensor state changes
+long count1old = 0; // left count of sensor state changes, previous time step
 int sensorcount20 = 0;
 int sensorcount21 = 0;
-long count2 = 0;
-long count2old = 0;
+long count2 = 0; // left count of sensor state changes
+long count2old = 0; // left count of sensor state changes, previous time step
 unsigned long previousMillisVelocity = 0;
 
 // velocity
-geometry_msgs::Twist twist;
-geometry_msgs::Twist twist_msg;
+geometry_msgs::Twist cmd_vel; // target velocity, assumed to be in local reference frame (x: front, y:side, z: top)
+geometry_msgs::Twist twist_msg_tracks; // raw track velocity
+geometry_msgs::Twist twist_msg_velocity; // estimated robot velocities, linear & angular
+
 // velocity sensors
-rosserial_arduino::Adc adc_msg;
-ros::Publisher pub_velocityRaw("velocityRaw", &adc_msg);
-ros::Publisher pub_velocity("velocity", &twist_msg);
-float velocity1 = 0.0; // angular velocity in rpm
-float velocity2 = 0.0; // angular velocity in rpm
+rosserial_arduino::Adc adc_msg; // raw sensor data
+ros::Publisher pub_velocitySensorRaw("robby_track_1/velocitySensorRaw", &adc_msg);
+ros::Publisher pub_velocityTracks("robby_track_1/velocityTracks", &twist_msg_tracks);
+ros::Publisher pub_velocity("robby_track_1/velocity", &twist_msg_velocity);
+
+float velocityLeft = 0.0; // angular velocity of left track [rpm]
+float velocityRight = 0.0; // angular velocity or right track [rpm]
 float wheelDiameter = 0.0036; // wheel diameter in [m]
+float trackDistance = 0.09; // track distance in [m]
+float dl = 0.0; // change of distance of left track [m]
+float dr = 0.0; // change of distance of left track [m]
+float dx = 0.0; // change of distance of robot in x-direction [m] (local reference frame)
+float dy = 0.0; // change of distance of robot in y-direction [m] (local reference frame)
+float ds = 0.0; // change of distance of robot in total [m]
+float dtheta = 0.0; // change of angle of robot in z-axis [rad] (local reference frame)
 // PID
 //double Setpoint, Input, Output;
 
@@ -74,7 +86,7 @@ float wheelDiameter = 0.0036; // wheel diameter in [m]
 // veloctiy callback
 void velocityCallback(const geometry_msgs::Twist& vel)
 {
-  twist = vel;
+  cmd_vel = vel;
 }
 
 // subscriber for velocity
@@ -127,15 +139,15 @@ void right (char a,char b)
 
 void loopMotor()
 {
-    int leftspeed = 255; //255 is maximum speed
-    int rightspeed = 255;
-    if (twist.linear.x > 1.0) {
+    int leftspeed = 150; //255 is maximum speed
+    int rightspeed = 150;
+    if (cmd_vel.linear.x > 1.0) {
         forward (leftspeed,rightspeed);
-    } else if (twist.linear.x < -1.0) {
+    } else if (cmd_vel.linear.x < -1.0) {
         reverse (leftspeed,rightspeed);
-    } else if (twist.angular.z > 1.0) {
+    } else if (cmd_vel.angular.z > 1.0) {
         left (leftspeed,rightspeed);
-    } else if (twist.angular.z < -1.0) {
+    } else if (cmd_vel.angular.z < -1.0) {
         right (leftspeed,rightspeed);
     } else {
         stop();
@@ -153,7 +165,9 @@ void loopSensor() {
   String outputHeader;
   rawsensorValue1 = analogRead(S1);
   rawsensorValue2 = analogRead(S2);
-  //Min value is 400 and max value is 800, so state chance can be done at 600.
+
+  // count rotations
+  // left
   if (rawsensorValue1 < sensorSwitch1){
     sensorcount11 = 1;
   }
@@ -164,7 +178,8 @@ void loopSensor() {
     count1 ++;
   }
   sensorcount10 = sensorcount11;
-  if (rawsensorValue2 < sensorSwitch2){ //Min value is 400 and max value is 800, so state chance can be done at 600.
+  // right
+  if (rawsensorValue2 < sensorSwitch2){
     sensorcount21 = 1;
   }
   else {
@@ -174,6 +189,7 @@ void loopSensor() {
     count2 ++;
   }
   sensorcount20 = sensorcount21;
+
   // min / max
   if (rawsensorValue1 > sensorMax1) {
     sensorMax1 = rawsensorValue1;
@@ -187,31 +203,59 @@ void loopSensor() {
   if (rawsensorValue2 < sensorMin2) {
     sensorMin2 = rawsensorValue2;
   }
+  // update of sensorswitch
+  if (count1 > sensorSwitchAutomatic) {
+      sensorSwitch1 = (sensorMax1 + sensorMin1) / 2;
+  }
+  if (count2 > sensorSwitchAutomatic) {
+      sensorSwitch1 = (sensorMax2 + sensorMin2) / 2;
+  }
+  // data raw
+  adc_msg.adc0 = sensorMax1 - sensorMin1;
+  adc_msg.adc1 = rawsensorValue1;
+  adc_msg.adc2 = count1;
+  adc_msg.adc3 = sensorMax2 - sensorMin2;
+  adc_msg.adc4 = rawsensorValue2;
+  adc_msg.adc5 = count2;
+  // data raw publish
+  pub_velocitySensorRaw.publish(&adc_msg);
+
+
+  // calculation of velocities
   if (intervalStarted2) {
       // time
       unsigned long currentMillisVelocity = millis();
-      // data
-      adc_msg.adc0 = sensorMin1;
-      adc_msg.adc1 = sensorMax1;
-      adc_msg.adc2 = count1;
-      adc_msg.adc3 = sensorMin2;
-      adc_msg.adc4= sensorMax2;
-      adc_msg.adc5 = count2;
-      // velocity
-      unsigned long timeDelta = currentMillisVelocity-previousMillisVelocity;
-      velocity1 = (count1-count1old)/16.0 / timeDelta * 1000.0 * 60.0;
-      velocity2 = (count2-count2old)/16.0 / timeDelta * 1000.0 * 60.0;
-      twist_msg.linear.x = velocity1 / 60 * wheelDiameter * 3.14159265359 ;// [m/s]
-      twist_msg.linear.y = velocity2 / 60 * wheelDiameter * 3.14159265359 ;// [m/s]
-      twist_msg.angular.x = velocity1; // [rpm]
-      twist_msg.angular.y = velocity2; // [rpm]
+      // velocity of tracks
+      unsigned long timeDelta = currentMillisVelocity-previousMillisVelocity; // [millis s]
+      velocityLeft = (count1-count1old)/16.0 / timeDelta * 1000.0 * 60.0;
+      velocityRight = (count2-count2old)/16.0 / timeDelta * 1000.0 * 60.0;
+      twist_msg_tracks.linear.x = velocityLeft / 60 * wheelDiameter * 3.14159265359 ;// [m/s]
+      twist_msg_tracks.linear.y = velocityRight / 60 * wheelDiameter * 3.14159265359 ;// [m/s]
+      twist_msg_tracks.linear.z = rawsensorValue1 ;// []
+      twist_msg_tracks.angular.x = velocityLeft; // [rpm]
+      twist_msg_tracks.angular.y = velocityRight; // [rpm]
+      twist_msg_tracks.angular.z = rawsensorValue2; // []
+      // velocity of robot
+      dl = twist_msg_tracks.linear.x * (timeDelta / 1000.0); // left track travelled [m]
+      dr = twist_msg_tracks.linear.y * (timeDelta / 1000.0); // right track travelled [m]
+      ds = (dl + dr) / 2.0; // robot travelled [m]
+      dtheta = (dr - dl) / trackDistance; // angular change [rad]
+      dx = ds * cos(dtheta / 2.0); // change in x-direction [m]
+      dy = ds * sin(dtheta / 2.0); // change in y-direction [m]
+      // fill twist_msg_velocity
+      twist_msg_velocity.linear.x = dx / (timeDelta / 1000.0); // [m/s]
+      twist_msg_velocity.linear.y = dy / (timeDelta / 1000.0); // [m/s]
+      twist_msg_velocity.linear.z = 0.0;
+      twist_msg_velocity.angular.x = 0.0;
+      twist_msg_velocity.angular.y = 0.0;
+      twist_msg_velocity.angular.z = dtheta / (timeDelta / 1000.0); // [rad/s]
       // update
       previousMillisVelocity = currentMillisVelocity;
       count1old = count1;
       count2old = count2;
       // publish
-      pub_velocity.publish(&twist_msg);
-      pub_velocityRaw.publish(&adc_msg);
+      pub_velocityTracks.publish(&twist_msg_tracks);
+      pub_velocity.publish(&twist_msg_velocity);
   }
 }
 
@@ -221,7 +265,8 @@ void setup()
   // init
   nh.initNode();
   // advertise
-  nh.advertise(pub_velocityRaw);
+  nh.advertise(pub_velocitySensorRaw);
+  nh.advertise(pub_velocityTracks);
   nh.advertise(pub_velocity);
   // subscribe
   nh.subscribe(velocity_sub);
