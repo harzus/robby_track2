@@ -2,13 +2,32 @@
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/tf.h>
+#include <geometry_msgs/Twist.h>
+#include "std_msgs/String.h"
 
+//--- subcriber---
+geometry_msgs::Twist twist_msg_velocity; // estimated robot velocities, linear & angular
+
+float a=1;
+
+// veloctiy callback
+void velocityCallback(const geometry_msgs::Twist& vel)
+{
+    ROS_INFO("velocityCallback triggered");
+    twist_msg_velocity = vel;
+}
+
+// main
 int main(int argc, char** argv) {
     ros::init(argc, argv, "rt_state_publisher");
     ros::NodeHandle n;
     ros::Publisher joint_pub = n.advertise<sensor_msgs::JointState>("joint_states", 1);
     tf::TransformBroadcaster broadcaster;
     ros::Rate loop_rate(30);
+
+    // subscriber for velocity
+    ros::Subscriber velocity_sub = n.subscribe("robby_track_1/velocity", 1000, velocityCallback);
 
     const double degree = M_PI/180;
 
@@ -35,22 +54,22 @@ int main(int argc, char** argv) {
         // update transform
         // (moving in a circle with radius=2)
         odom_trans.header.stamp = ros::Time::now();
-        odom_trans.transform.translation.x = cos(servo1Angle)*2;
-        odom_trans.transform.translation.y = sin(servo1Angle)*2;
-        odom_trans.transform.translation.z = .7;
-        odom_trans.transform.rotation = tf::createQuaternionMsgFromYaw(servo1Angle+M_PI/2);
+        odom_trans.transform.translation.x += twist_msg_velocity.linear.x;
+        odom_trans.transform.translation.y += twist_msg_velocity.linear.y;
+        odom_trans.transform.translation.z = 0.0;
+        odom_trans.transform.rotation = tf::createQuaternionMsgFromYaw(twist_msg_velocity.angular.z);
 
         //send the joint state and transform
         joint_pub.publish(joint_state);
         broadcaster.sendTransform(odom_trans);
 
         // Create new robot state
-        servo1Angle += degree/4;
+        // servo1Angle += degree/4;
+        ros::spinOnce();
 
         // This will adjust as needed per iteration
         loop_rate.sleep();
     }
-
 
     return 0;
 }
