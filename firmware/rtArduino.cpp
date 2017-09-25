@@ -39,6 +39,8 @@ int M2 = 7; //M2 Direction Control
 
 int S1 = 0; // left sensor
 int S2 = 1; // right sensor
+int leftTrackDirection; // direction of left track, 1=forward, -1=backward)
+int rightTrackDirection; // direction of left track, 1=forward, -1=backward)
 int rawsensorValue1 = 0; // variable to store the value coming from the sensor
 int rawsensorValue2 = 0; // variable to store the value coming from the sensor
 int sensorMin1 = 1000;
@@ -71,14 +73,8 @@ ros::Publisher pub_velocity("robby_track_1/velocity", &twist_msg_velocity);
 
 float velocityLeft = 0.0; // angular velocity of left track [rpm]
 float velocityRight = 0.0; // angular velocity or right track [rpm]
-float wheelDiameter = 0.0036; // wheel diameter in [m]
+float wheelDiameter = 0.036; // wheel diameter in [m]
 float trackDistance = 0.09; // track distance in [m]
-float dl = 0.0; // change of distance of left track [m]
-float dr = 0.0; // change of distance of left track [m]
-float dx = 0.0; // change of distance of robot in x-direction [m] (local reference frame)
-float dy = 0.0; // change of distance of robot in y-direction [m] (local reference frame)
-float ds = 0.0; // change of distance of robot in total [m]
-float dtheta = 0.0; // change of angle of robot in z-axis [rad] (local reference frame)
 // PID
 //double Setpoint, Input, Output;
 
@@ -137,21 +133,89 @@ void right (char a,char b)
   digitalWrite(M2,HIGH);
 }
 
+int voltageFromVelocity (float velocity)
+{
+    // 100 is minimum speed (ca 0.01 m/s) 255 (ca 0.1 m/s) is maximum speed
+    int minVoltage = 100; // for motors
+    int maxVoltage = 255; // for motors
+    float minVelocity = 0.01; // for tracks
+    float maxVelocity = 0.1;  // for tracks
+
+    int voltageRange;
+    float velocityRange;
+    float usedVelocity;
+
+    voltageRange = maxVoltage - minVoltage;
+    velocityRange = maxVelocity - minVelocity;
+
+    if (abs(velocity) < minVelocity) {
+        return 0;
+    } else {
+        usedVelocity = min(maxVelocity,abs(velocity));
+        return minVoltage + (usedVelocity - minVelocity) * voltageRange / velocityRange;
+    }
+
+}
+
 void loopMotor()
 {
-    int leftspeed = 150; //255 is maximum speed
-    int rightspeed = 150;
-    if (cmd_vel.linear.x > 1.0) {
-        forward (leftspeed,rightspeed);
-    } else if (cmd_vel.linear.x < -1.0) {
-        reverse (leftspeed,rightspeed);
-    } else if (cmd_vel.angular.z > 1.0) {
+
+    float vl; // left track velocity [m/s]
+    float vr; // right track velocity [m/s]
+
+    vl = cmd_vel.linear.x - trackDistance / 2.0 * cmd_vel.angular.z; // rough estimation only valid for small angles
+    vr = 2.0 * cmd_vel.linear.x - vl; // rough estimation only valid for small angles
+
+    // left motor actuation
+    analogWrite(E1, voltageFromVelocity(vl));
+    // right motor actuation
+    analogWrite(E2, voltageFromVelocity(vr));
+    // leftTrackDirection
+    if (vl < 0.0) {
+        leftTrackDirection = -1;
+        digitalWrite(M1, HIGH);
+    } else {
+        leftTrackDirection = 1;
+        digitalWrite(M1, LOW);
+    }
+    // rightTrackDirection
+    if (vr < 0.0) {
+        rightTrackDirection = -1;
+        digitalWrite(M2, HIGH);
+    } else {
+        rightTrackDirection = 1;
+        digitalWrite(M2, LOW);
+    }
+
+/*    int leftspeed = 1000;
+    int rightspeed = 1000;
+    // variable speed and direction
+
+     *     fixed direction
+     * // forward
+    if (cmd_vel.linear.x > 0.01) {
+        forward (leftspeed*cmd_vel.linear.x,rightspeed*cmd_vel.linear.x);
+        leftTrackDirection = 1;
+        rightTrackDirection = 1;
+    // backward
+    } else if (cmd_vel.linear.x < -0.01) {
+        reverse (-leftspeed*cmd_vel.linear.x,-rightspeed*cmd_vel.linear.x);
+        leftTrackDirection = -1;
+        rightTrackDirection = -1;
+    // left
+    } else if (cmd_vel.angular.z > 0.01) {
         left (leftspeed,rightspeed);
-    } else if (cmd_vel.angular.z < -1.0) {
+        leftTrackDirection = -1;
+        rightTrackDirection = 1;
+    // right
+    } else if (cmd_vel.angular.z < -0.01) {
         right (leftspeed,rightspeed);
+        leftTrackDirection = 1;
+        rightTrackDirection = -1;
     } else {
         stop();
     }
+    */
 }
 
 void setupSensor() {
@@ -165,6 +229,12 @@ void loopSensor() {
   String outputHeader;
   rawsensorValue1 = analogRead(S1);
   rawsensorValue2 = analogRead(S2);
+  float dl; // change of distance of left track [m]
+  float dr; // change of distance of left track [m]
+  float dx; // change of distance of robot in x-direction [m] (local reference frame)
+  float dy; // change of distance of robot in y-direction [m] (local reference frame)
+  float ds; // change of distance of robot in total [m]
+  float dtheta; // change of angle of robot in z-axis [rad] (local reference frame)
 
   // count rotations
   // left
@@ -227,13 +297,13 @@ void loopSensor() {
       unsigned long currentMillisVelocity = millis();
       // velocity of tracks
       unsigned long timeDelta = currentMillisVelocity-previousMillisVelocity; // [millis s]
-      velocityLeft = (count1-count1old)/16.0 / timeDelta * 1000.0 * 60.0;
-      velocityRight = (count2-count2old)/16.0 / timeDelta * 1000.0 * 60.0;
-      twist_msg_tracks.linear.x = velocityLeft / 60 * wheelDiameter * 3.14159265359 ;// [m/s]
-      twist_msg_tracks.linear.y = velocityRight / 60 * wheelDiameter * 3.14159265359 ;// [m/s]
+      velocityLeft = leftTrackDirection * (count1-count1old)/20.0 / (timeDelta / 1000.0); // rps
+      velocityRight = rightTrackDirection * (count2-count2old)/20.0 / (timeDelta / 1000.0); // rps
+      twist_msg_tracks.linear.x = velocityLeft  * wheelDiameter * 3.14159265359 ;// [m/s]
+      twist_msg_tracks.linear.y = velocityRight  * wheelDiameter * 3.14159265359 ;// [m/s]
       twist_msg_tracks.linear.z = rawsensorValue1 ;// []
-      twist_msg_tracks.angular.x = velocityLeft; // [rpm]
-      twist_msg_tracks.angular.y = velocityRight; // [rpm]
+      twist_msg_tracks.angular.x = velocityLeft; // [rps]
+      twist_msg_tracks.angular.y = velocityRight; // [rps]
       twist_msg_tracks.angular.z = rawsensorValue2; // []
       // velocity of robot
       dl = twist_msg_tracks.linear.x * (timeDelta / 1000.0); // left track travelled [m]
