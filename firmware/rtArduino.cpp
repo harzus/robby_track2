@@ -1,4 +1,7 @@
+#include <Arduino.h>
+#include <Servo.h>
 #include <ros.h>
+#include <std_msgs/UInt16.h>
 #include <std_msgs/String.h>
 #include <std_msgs/Empty.h>
 #include <geometry_msgs/Twist.h>
@@ -9,7 +12,8 @@
 
 //#include <PID_v1.h>
 
-#include <Arduino.h>
+
+
 
 ros::NodeHandle nh;
 
@@ -32,11 +36,6 @@ int M1 = 8; //M1 Direction Control
 int M2 = 7; //M2 Direction Control
 
 //------- rotational sensors ----------
-// The code below simply counts the number of changes,
-// so a disc with 8x white sections and 8x cutouts will
-// provide a count of 16 per 360 degree rotation. It is
-// up to you to integrate it with your code
-
 int S1 = 0; // left sensor
 int S2 = 1; // right sensor
 int leftTrackDirection; // direction of left track, 1=forward, -1=backward)
@@ -49,7 +48,6 @@ int sensorMax1 = 0;
 int sensorMax2 = 0;
 int sensorSwitch1 = 700; // initial guess for sensor switch
 int sensorSwitch2 = 790; // initial guess for sensor switch
-int sensorSwitchAutomatic = 1e20; // after x sensor counts sensorSwitch1&2 will be the average of sensorMin & sensorMax
 int sensorcount10 = 0;
 int sensorcount11 = 0;
 long count1 = 0; // left count of sensor state changes
@@ -78,6 +76,16 @@ float trackDistance = 0.09; // track distance in [m]
 // PID
 //double Setpoint, Input, Output;
 
+//--- Servos ---
+Servo servoHor;  // create servo object to control a servo
+Servo servoVert;  // create servo object to control a servo
+const int servoHorPin   = 9;
+const int servoVertPin  = 3;
+int servoHorPos   = 78;
+int servoVertPos  = 100;
+
+//geometry_msgs::Vector3 cmd_servo; // servo position
+
 
 // veloctiy callback
 void velocityCallback(const geometry_msgs::Twist& vel)
@@ -88,6 +96,7 @@ void velocityCallback(const geometry_msgs::Twist& vel)
 // subscriber for velocity
 ros::Subscriber<geometry_msgs::Twist> velocity_sub("robby_track_1/cmd_vel", &velocityCallback);
 
+
 void setupMotor()
 {
   int i;
@@ -95,44 +104,22 @@ void setupMotor()
   pinMode(i, OUTPUT);
 }
 
-void stop() //Stop
+/*
+// callback for servo position, multiple subscribesr didnt work yet...
+void servoCallback(const std_msgs::UInt16& cmd_msg)
 {
-  digitalWrite(E1,LOW);
-  digitalWrite(E2,LOW);
+    //cmd_servo = cmd_msg;
+    //servoHorPos = cmd_msg.z;
+    //servoVertPos = cmd_msg.y;
+
+//    servoHor.write(cmd_msg.data);
+//    servoVert.write(cmd_msg.data);
 }
 
-void forward(char a,char b)
-{
-  analogWrite (E1,a);
-  digitalWrite(M1,LOW);
-  analogWrite (E2,b);
-  digitalWrite(M2,LOW);
-}
-
-void reverse (char a,char b)
-{
-  analogWrite (E1,a);
-  digitalWrite(M1,HIGH);
-  analogWrite (E2,b);
-  digitalWrite(M2,HIGH);
-}
-
-void left (char a,char b)
-{
-  analogWrite (E1,a);
-  digitalWrite(M1,HIGH);
-  analogWrite (E2,b);
-  digitalWrite(M2,LOW);
-}
-
-void right (char a,char b)
-{
-  analogWrite (E1,a);
-  digitalWrite(M1,LOW);
-  analogWrite (E2,b);
-  digitalWrite(M2,HIGH);
-}
-
+// subcriber for servo position
+ros::Subscriber<std_msgs::UInt16> subscriberServo("robby_track_1/servo", servoCallback);
+*/
+// service function translates velocity [m/s] into command for motor
 int voltageFromVelocity (float velocity)
 {
     // 100 is minimum speed (ca 0.01 m/s) 255 (ca 0.1 m/s) is maximum speed
@@ -187,35 +174,6 @@ void loopMotor()
         digitalWrite(M2, LOW);
     }
 
-/*    int leftspeed = 1000;
-    int rightspeed = 1000;
-    // variable speed and direction
-
-     *     fixed direction
-     * // forward
-    if (cmd_vel.linear.x > 0.01) {
-        forward (leftspeed*cmd_vel.linear.x,rightspeed*cmd_vel.linear.x);
-        leftTrackDirection = 1;
-        rightTrackDirection = 1;
-    // backward
-    } else if (cmd_vel.linear.x < -0.01) {
-        reverse (-leftspeed*cmd_vel.linear.x,-rightspeed*cmd_vel.linear.x);
-        leftTrackDirection = -1;
-        rightTrackDirection = -1;
-    // left
-    } else if (cmd_vel.angular.z > 0.01) {
-        left (leftspeed,rightspeed);
-        leftTrackDirection = -1;
-        rightTrackDirection = 1;
-    // right
-    } else if (cmd_vel.angular.z < -0.01) {
-        right (leftspeed,rightspeed);
-        leftTrackDirection = 1;
-        rightTrackDirection = -1;
-    } else {
-        stop();
-    }
-    */
 }
 
 void setupSensor() {
@@ -273,13 +231,6 @@ void loopSensor() {
   if (rawsensorValue2 < sensorMin2) {
     sensorMin2 = rawsensorValue2;
   }
-  // update of sensorswitch
-  if (count1 > sensorSwitchAutomatic) {
-      sensorSwitch1 = (sensorMax1 + sensorMin1) / 2;
-  }
-  if (count2 > sensorSwitchAutomatic) {
-      sensorSwitch1 = (sensorMax2 + sensorMin2) / 2;
-  }
   // data raw
   adc_msg.adc0 = sensorMax1 - sensorMin1;
   adc_msg.adc1 = rawsensorValue1;
@@ -329,19 +280,73 @@ void loopSensor() {
   }
 }
 
+// +++++++++++++++++++++++++ SERVOS +++++++++++++++++++++++++++++++++++++++++++
+void setupServo() {
+    servoHor.attach(servoHorPin);  // attaches the servo on pin 9 to the servo object
+    servoVert.attach(servoVertPin);  // attaches the servo on pin 9 to the servo object
+    servoHor.write(servoHorPos);                  // sets the servo position according to the scaled value
+    servoVert.write(servoVertPos);                  // sets the servo position according to the scaled value
+}
 
+void loopServo()
+{
+/*    servoHor.write(cmd_servo.x);
+    servoVert.write(cmd_servo.y);
+
+  int servoStep=10;
+  int servoMin=0;
+  int servoMax=180;
+  if (serialReceived) {
+    switch(serialVal) // Perform an action depending on the command
+    {
+      case 'i'://Move Forward
+      case 'I':
+        servoVertPos -= servoStep;
+        servoVertPos = max(servoMin,servoVertPos);
+        servoVert.write(servoVertPos);                  // sets the servo position according to the scaled value
+        break;
+      case 'k'://Move Backwards
+      case 'K':
+        servoVertPos += servoStep;
+        servoVertPos = min(servoMax,servoVertPos);
+        servoVert.write(servoVertPos);                  // sets the servo position according to the scaled value
+        break;
+      case 'j'://Turn Left
+      case 'J':
+        servoHorPos += servoStep;
+        servoHorPos = min(servoMax,servoHorPos);
+        servoHor.write(servoHorPos);                  // sets the servo position according to the scaled value
+        break;
+      case 'l'://Turn Right
+      case 'L':
+        servoHorPos -= servoStep;
+        servoHorPos = max(servoMin,servoHorPos);
+        servoHor.write(servoHorPos);                  // sets the servo position according to the scaled value
+        break;
+      default:
+        break;
+    }
+  }
+  */
+}
+
+
+// +++++++++++++++++++++++++ main loop +++++++++++++++++++++++++++++++++++++++++++
 void setup()
 {
   // init
   nh.initNode();
+  // setup
+  setupMotor();
+  setupSensor();
+  setupServo();
   // advertise
   nh.advertise(pub_velocitySensorRaw);
   nh.advertise(pub_velocityTracks);
   nh.advertise(pub_velocity);
   // subscribe
+  //nh.subscribe(subscriberServo);
   nh.subscribe(velocity_sub);
-  setupMotor();
-  setupSensor();
 }
 
 void loop()
@@ -362,6 +367,7 @@ void loop()
     }
   loopMotor();
   loopSensor();
+  loopServo();
   // interval 2
   if (intervalStarted2) {
   }
