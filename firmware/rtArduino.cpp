@@ -9,11 +9,9 @@
 #include <tf/tf.h>
 #include <string.h>
 #include <rosserial_arduino/Adc.h>
+#include <sensor_msgs/Range.h>
 
 //#include <PID_v1.h>
-
-
-
 
 ros::NodeHandle nh;
 
@@ -58,15 +56,17 @@ long count2 = 0; // left count of sensor state changes
 long count2old = 0; // left count of sensor state changes, previous time step
 unsigned long previousMillisVelocity = 0;
 
+//----------------------  velocity ----------------------
 // velocity
 geometry_msgs::Twist cmd_vel; // target velocity, assumed to be in local reference frame (x: front, y:side, z: top)
-geometry_msgs::Twist twist_msg_tracks; // raw track velocity
+//geometry_msgs::Twist twist_msg_tracks; // raw track velocity, for debug only
 geometry_msgs::Twist twist_msg_velocity; // estimated robot velocities, linear & angular
 
 // velocity sensors
-rosserial_arduino::Adc adc_msg; // raw sensor data
-ros::Publisher pub_velocitySensorRaw("robby_track_1/velocitySensorRaw", &adc_msg);
-ros::Publisher pub_velocityTracks("robby_track_1/velocityTracks", &twist_msg_tracks);
+// if everything is published at the same time arduino will run out of memery
+//rosserial_arduino::Adc adc_msg; // raw sensor data, for debug only
+//ros::Publisher pub_velocitySensorRaw("robby_track_1/velocitySensorRaw", &adc_msg); // for debug only
+//ros::Publisher pub_velocityTracks("robby_track_1/velocityTracks", &twist_msg_tracks); // for debug only
 ros::Publisher pub_velocity("robby_track_1/velocity", &twist_msg_velocity);
 
 float velocityLeft = 0.0; // angular velocity of left track [rpm]
@@ -76,7 +76,7 @@ float trackDistance = 0.09; // track distance in [m]
 // PID
 //double Setpoint, Input, Output;
 
-//--- Servos ---
+//----------------------  Servos ----------------------
 Servo servoHor;  // create servo object to control a servo
 Servo servoVert;  // create servo object to control a servo
 const int servoHorPin   = 9;
@@ -86,7 +86,13 @@ int servoVertPos  = 100;
 
 //geometry_msgs::Vector3 cmd_servo; // servo position
 
+//----------------------  sonar ----------------------
+const int sonarPin = 12; // pin connection
 
+sensor_msgs::Range range_msg_sonar; // message, distance from sonar_sensor
+ros::Publisher pub_range("robby_track_1/range", &range_msg_sonar);
+
+// ++++++++++++++++++++++++ functions start +++++++++++++++++++++++++
 // veloctiy callback
 void velocityCallback(const geometry_msgs::Twist& vel)
 {
@@ -104,21 +110,21 @@ void setupMotor()
   pinMode(i, OUTPUT);
 }
 
-/*
+
 // callback for servo position, multiple subscribesr didnt work yet...
-void servoCallback(const std_msgs::UInt16& cmd_msg)
-{
-    //cmd_servo = cmd_msg;
-    //servoHorPos = cmd_msg.z;
-    //servoVertPos = cmd_msg.y;
+//void servoCallback(const geometry_msgs::Vector3& cmd_msg)
+//{
+//    cmd_servo = cmd_msg;
+//    servoHorPos = cmd_msg.z;
+//    servoVertPos = cmd_msg.y;
 
-//    servoHor.write(cmd_msg.data);
-//    servoVert.write(cmd_msg.data);
-}
+//    servoHor.write(servoHorPos);
+//    servoVert.write(servoVertPos);
+//}
 
-// subcriber for servo position
-ros::Subscriber<std_msgs::UInt16> subscriberServo("robby_track_1/servo", servoCallback);
-*/
+//// subcriber for servo position
+//ros::Subscriber<geometry_msgs::Vector3> subscriberServo("robby_track_1/servo", servoCallback);
+
 // service function translates velocity [m/s] into command for motor
 int voltageFromVelocity (float velocity)
 {
@@ -177,9 +183,8 @@ void loopMotor()
 }
 
 void setupSensor() {
-  int i;
-  for(i=10;i<=12;i++)
-    pinMode(i, OUTPUT);
+    pinMode(S1, OUTPUT);
+    pinMode(S2, OUTPUT);
 }
 
 void loopSensor() {
@@ -232,14 +237,14 @@ void loopSensor() {
     sensorMin2 = rawsensorValue2;
   }
   // data raw
-  adc_msg.adc0 = sensorMax1 - sensorMin1;
-  adc_msg.adc1 = rawsensorValue1;
-  adc_msg.adc2 = count1;
-  adc_msg.adc3 = sensorMax2 - sensorMin2;
-  adc_msg.adc4 = rawsensorValue2;
-  adc_msg.adc5 = count2;
-  // data raw publish
-  pub_velocitySensorRaw.publish(&adc_msg);
+//  adc_msg.adc0 = sensorMax1 - sensorMin1;
+//  adc_msg.adc1 = rawsensorValue1;
+//  adc_msg.adc2 = count1;
+//  adc_msg.adc3 = sensorMax2 - sensorMin2;
+//  adc_msg.adc4 = rawsensorValue2;
+//  adc_msg.adc5 = count2;
+//  // data raw publish
+//  pub_velocitySensorRaw.publish(&adc_msg);
 
 
   // calculation of velocities
@@ -250,15 +255,17 @@ void loopSensor() {
       unsigned long timeDelta = currentMillisVelocity-previousMillisVelocity; // [millis s]
       velocityLeft = leftTrackDirection * (count1-count1old)/20.0 / (timeDelta / 1000.0); // rps
       velocityRight = rightTrackDirection * (count2-count2old)/20.0 / (timeDelta / 1000.0); // rps
-      twist_msg_tracks.linear.x = velocityLeft  * wheelDiameter * 3.14159265359 ;// [m/s]
-      twist_msg_tracks.linear.y = velocityRight  * wheelDiameter * 3.14159265359 ;// [m/s]
-      twist_msg_tracks.linear.z = rawsensorValue1 ;// []
-      twist_msg_tracks.angular.x = velocityLeft; // [rps]
-      twist_msg_tracks.angular.y = velocityRight; // [rps]
-      twist_msg_tracks.angular.z = rawsensorValue2; // []
+//      twist_msg_tracks.linear.x = velocityLeft  * wheelDiameter * 3.14159265359 ;// [m/s]
+//      twist_msg_tracks.linear.y = velocityRight  * wheelDiameter * 3.14159265359 ;// [m/s]
+//      twist_msg_tracks.linear.z = rawsensorValue1 ;// []
+//      twist_msg_tracks.angular.x = velocityLeft; // [rps]
+//      twist_msg_tracks.angular.y = velocityRight; // [rps]
+//      twist_msg_tracks.angular.z = rawsensorValue2; // []
       // velocity of robot
-      dl = twist_msg_tracks.linear.x * (timeDelta / 1000.0); // left track travelled [m]
-      dr = twist_msg_tracks.linear.y * (timeDelta / 1000.0); // right track travelled [m]
+      //      dl = twist_msg_tracks.linear.x * (timeDelta / 1000.0); // left track travelled [m]
+      //      dr = twist_msg_tracks.linear.y * (timeDelta / 1000.0); // right track travelled [m]
+      dl = velocityLeft  * wheelDiameter * 3.14159265359 * (timeDelta / 1000.0); // left track travelled [m]
+      dr = velocityRight  * wheelDiameter * 3.14159265359 * (timeDelta / 1000.0); // right track travelled [m]
       ds = (dl + dr) / 2.0; // robot travelled [m]
       dtheta = (dr - dl) / trackDistance; // angular change [rad]
       dx = ds * cos(dtheta / 2.0); // change in x-direction [m]
@@ -275,7 +282,7 @@ void loopSensor() {
       count1old = count1;
       count2old = count2;
       // publish
-      pub_velocityTracks.publish(&twist_msg_tracks);
+      //pub_velocityTracks.publish(&twist_msg_tracks);
       pub_velocity.publish(&twist_msg_velocity);
   }
 }
@@ -288,46 +295,64 @@ void setupServo() {
     servoVert.write(servoVertPos);                  // sets the servo position according to the scaled value
 }
 
-void loopServo()
-{
-/*    servoHor.write(cmd_servo.x);
-    servoVert.write(cmd_servo.y);
 
-  int servoStep=10;
-  int servoMin=0;
-  int servoMax=180;
-  if (serialReceived) {
-    switch(serialVal) // Perform an action depending on the command
-    {
-      case 'i'://Move Forward
-      case 'I':
-        servoVertPos -= servoStep;
-        servoVertPos = max(servoMin,servoVertPos);
-        servoVert.write(servoVertPos);                  // sets the servo position according to the scaled value
-        break;
-      case 'k'://Move Backwards
-      case 'K':
-        servoVertPos += servoStep;
-        servoVertPos = min(servoMax,servoVertPos);
-        servoVert.write(servoVertPos);                  // sets the servo position according to the scaled value
-        break;
-      case 'j'://Turn Left
-      case 'J':
-        servoHorPos += servoStep;
-        servoHorPos = min(servoMax,servoHorPos);
-        servoHor.write(servoHorPos);                  // sets the servo position according to the scaled value
-        break;
-      case 'l'://Turn Right
-      case 'L':
-        servoHorPos -= servoStep;
-        servoHorPos = max(servoMin,servoHorPos);
-        servoHor.write(servoHorPos);                  // sets the servo position according to the scaled value
-        break;
-      default:
-        break;
-    }
+
+//++++++++++++++++++ SONAR +++++++++++++++++++++++++
+
+long microsecondsToInches(long microseconds)
+{
+  // According to Parallax's datasheet for the PING))), there are
+  // 73.746 microseconds per inch (i.e. sound travels at 1130 feet per
+  // second).  This gives the distance travelled by the ping, outbound
+  // and return, so we divide by 2 to get the distance of the obstacle.
+  // See: http://www.parallax.com/dl/docs/prod/acc/28015-PING-v1.3.pdf
+  return microseconds / 74 / 2;
+}
+
+long microsecondsToCentimeters(long microseconds)
+{
+  // The speed of sound is 340 m/s or 29 microseconds per centimeter.
+  // The ping travels out and back, so to find the distance of the
+  // object we take half of the distance travelled.
+  return microseconds / 29 / 2;
+}
+
+void loopUltra()
+{
+  // establish variables for duration of the ping,
+  // and the distance result in inches and centimeters:
+  long duration, inches, cm;
+
+  if (intervalStarted2) {
+    // The PING))) is triggered by a HIGH pulse of 2 or more microseconds.
+    // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
+    pinMode(sonarPin, OUTPUT);
+    digitalWrite(sonarPin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(sonarPin, HIGH);
+    delayMicroseconds(15);
+    digitalWrite(sonarPin, LOW);
+    delayMicroseconds(20);
+    // The same pin is used to read the signal from the PING))): a HIGH
+    // pulse whose duration is the time (in microseconds) from the sending
+    // of the ping to the reception of its echo off of an object.
+    pinMode(sonarPin, INPUT);
+    duration = pulseIn(sonarPin, HIGH);
+
+    // convert the time into a distance
+    inches = microsecondsToInches(duration);
+    cm = microsecondsToCentimeters(duration);
+
+    // put data into message
+    range_msg_sonar.radiation_type = sensor_msgs::Range::ULTRASOUND;
+    range_msg_sonar.header.frame_id =  "/sonar"; // frame
+    range_msg_sonar.header.stamp = nh.now(); // time
+    range_msg_sonar.field_of_view = 60.0 / 2.0 / 3.14; // [rad]
+    range_msg_sonar.min_range = 0.1; // [m]
+    range_msg_sonar.max_range = 4.0; // [m]
+    range_msg_sonar.range = cm / 100.0; // [m]
+    pub_range.publish(&range_msg_sonar);
   }
-  */
 }
 
 
@@ -341,9 +366,10 @@ void setup()
   setupSensor();
   setupServo();
   // advertise
-  nh.advertise(pub_velocitySensorRaw);
-  nh.advertise(pub_velocityTracks);
+  //  nh.advertise(pub_velocitySensorRaw);
+  //nh.advertise(pub_velocityTracks);
   nh.advertise(pub_velocity);
+  nh.advertise(pub_range);
   // subscribe
   //nh.subscribe(subscriberServo);
   nh.subscribe(velocity_sub);
@@ -367,7 +393,7 @@ void loop()
     }
   loopMotor();
   loopSensor();
-  loopServo();
+  loopUltra();
   // interval 2
   if (intervalStarted2) {
   }
