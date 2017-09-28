@@ -1,32 +1,23 @@
 #include <Arduino.h>
 #include <Servo.h>
 #include <ros.h>
-#include <std_msgs/UInt16.h>
 #include <std_msgs/String.h>
 #include <std_msgs/Empty.h>
 #include <geometry_msgs/Twist.h>
-#include <roscpp/Logger.h>
-#include <tf/tf.h>
 #include <string.h>
 #include <rosserial_arduino/Adc.h>
 #include <sensor_msgs/Range.h>
 
-//#include <PID_v1.h>
-
 ros::NodeHandle nh;
 
 // will store last time
-unsigned long previousMillis1 = 0;
-unsigned long previousMillis2 = 0;
+unsigned long previousMillis = 0;
 // interval1 to do something in milliseconds
-const long interval1 = 100;
-int numIntervals1 = 0;
-bool intervalStarted1;
-// interval2 to do something in milliseconds
-const long interval2 = 300;
-int numIntervals2 = 0;
-bool intervalStarted2;
+const long interval = 300;
+int numIntervals = 0;
+bool intervalStarted;
 
+//------------------------- motors---------------------------------------------------
 //To control the rover, Copy and paste the code below into the Arduino software
 int E1 = 6; //M1 Speed Control
 int E2 = 5; //M2 Speed Control
@@ -40,10 +31,10 @@ int leftTrackDirection; // direction of left track, 1=forward, -1=backward)
 int rightTrackDirection; // direction of left track, 1=forward, -1=backward)
 int rawsensorValue1 = 0; // variable to store the value coming from the sensor
 int rawsensorValue2 = 0; // variable to store the value coming from the sensor
-int sensorMin1 = 1000;
-int sensorMin2 = 1000;
-int sensorMax1 = 0;
-int sensorMax2 = 0;
+//int sensorMin1 = 1000; // only for debug
+//int sensorMin2 = 1000;// only for debug
+//int sensorMax1 = 0;// only for debug
+//int sensorMax2 = 0;// only for debug
 int sensorSwitch1 = 700; // initial guess for sensor switch
 int sensorSwitch2 = 790; // initial guess for sensor switch
 int sensorcount10 = 0;
@@ -73,8 +64,6 @@ float velocityLeft = 0.0; // angular velocity of left track [rpm]
 float velocityRight = 0.0; // angular velocity or right track [rpm]
 float wheelDiameter = 0.036; // wheel diameter in [m]
 float trackDistance = 0.09; // track distance in [m]
-// PID
-//double Setpoint, Input, Output;
 
 //----------------------  Servos ----------------------
 Servo servoHor;  // create servo object to control a servo
@@ -223,19 +212,19 @@ void loopSensor() {
   }
   sensorcount20 = sensorcount21;
 
-  // min / max
-  if (rawsensorValue1 > sensorMax1) {
-    sensorMax1 = rawsensorValue1;
-  }
-  if (rawsensorValue2> sensorMax2) {
-    sensorMax2 = rawsensorValue2;
-  }
-  if (rawsensorValue1 < sensorMin1) {
-    sensorMin1 = rawsensorValue1;
-  }
-  if (rawsensorValue2 < sensorMin2) {
-    sensorMin2 = rawsensorValue2;
-  }
+//  // min / max
+//  if (rawsensorValue1 > sensorMax1) {
+//    sensorMax1 = rawsensorValue1;
+//  }
+//  if (rawsensorValue2> sensorMax2) {
+//    sensorMax2 = rawsensorValue2;
+//  }
+//  if (rawsensorValue1 < sensorMin1) {
+//    sensorMin1 = rawsensorValue1;
+//  }
+//  if (rawsensorValue2 < sensorMin2) {
+//    sensorMin2 = rawsensorValue2;
+//  }
   // data raw
 //  adc_msg.adc0 = sensorMax1 - sensorMin1;
 //  adc_msg.adc1 = rawsensorValue1;
@@ -248,7 +237,7 @@ void loopSensor() {
 
 
   // calculation of velocities
-  if (intervalStarted2) {
+  if (intervalStarted) {
       // time
       unsigned long currentMillisVelocity = millis();
       // velocity of tracks
@@ -299,15 +288,6 @@ void setupServo() {
 
 //++++++++++++++++++ SONAR +++++++++++++++++++++++++
 
-long microsecondsToInches(long microseconds)
-{
-  // According to Parallax's datasheet for the PING))), there are
-  // 73.746 microseconds per inch (i.e. sound travels at 1130 feet per
-  // second).  This gives the distance travelled by the ping, outbound
-  // and return, so we divide by 2 to get the distance of the obstacle.
-  // See: http://www.parallax.com/dl/docs/prod/acc/28015-PING-v1.3.pdf
-  return microseconds / 74 / 2;
-}
 
 long microsecondsToCentimeters(long microseconds)
 {
@@ -323,7 +303,7 @@ void loopUltra()
   // and the distance result in inches and centimeters:
   long duration, inches, cm;
 
-  if (intervalStarted2) {
+  if (intervalStarted) {
     // The PING))) is triggered by a HIGH pulse of 2 or more microseconds.
     // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
     pinMode(sonarPin, OUTPUT);
@@ -340,18 +320,23 @@ void loopUltra()
     duration = pulseIn(sonarPin, HIGH);
 
     // convert the time into a distance
-    inches = microsecondsToInches(duration);
     cm = microsecondsToCentimeters(duration);
 
     // put data into message
     range_msg_sonar.radiation_type = sensor_msgs::Range::ULTRASOUND;
-    range_msg_sonar.header.frame_id =  "/sonar"; // frame
+    range_msg_sonar.header.frame_id =  "/ultraSonic"; // frame
     range_msg_sonar.header.stamp = nh.now(); // time
-    range_msg_sonar.field_of_view = 60.0 / 2.0 / 3.14; // [rad]
-    range_msg_sonar.min_range = 0.1; // [m]
+    range_msg_sonar.field_of_view = 60.0 / 360 * 3.14; // [rad]
+    range_msg_sonar.min_range = 0.03; // [m]
     range_msg_sonar.max_range = 4.0; // [m]
     range_msg_sonar.range = cm / 100.0; // [m]
-    pub_range.publish(&range_msg_sonar);
+    // publish only if in detection window: how do i do that???
+//    if ((range_msg_sonar.range >= range_msg_sonar.min_range)
+//            &&
+//            (range_msg_sonar.range <= range_msg_sonar.max_range)) {
+        pub_range.publish(&range_msg_sonar);
+
+//    }
   }
 }
 
@@ -379,27 +364,19 @@ void loop()
 {
     // interval
     unsigned long currentMillis = millis();
-    // 1
-    if (currentMillis - previousMillis1 >= interval1) {
-      previousMillis1 = currentMillis;
-      intervalStarted1 = true;
-      numIntervals1++;
+
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;
+      intervalStarted = true;
+      numIntervals++;
     }
-    // 2
-    if (currentMillis - previousMillis2 >= interval2) {
-      previousMillis2 = currentMillis;
-      intervalStarted2 = true;
-      numIntervals2++;
-    }
+
   loopMotor();
   loopSensor();
   loopUltra();
-  // interval 2
-  if (intervalStarted2) {
-  }
-  nh.spinOnce();
+
   // end
-  intervalStarted1 = false;
-  intervalStarted2 = false;
+  intervalStarted = false;
+  nh.spinOnce();
   delay(1);
 }

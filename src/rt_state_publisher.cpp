@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
         joint_state.header.stamp = ros::Time::now();
         joint_state.name.resize(2);
         joint_state.position.resize(2);
-        joint_state.name[0] ="servo1_base_to_head";
+        joint_state.name[0] ="base_to_head1";
         joint_state.position[0] = servo1Angle;
         joint_state.name[1] ="servo1_to_servo2";
         joint_state.position[1] = servo1Angle;

@@ -3,7 +3,7 @@
   <link name="base_link">
     <visual>
       <geometry>
-        <box size="0.3 0.15 0.05"/>
+        <box size="0.2 0.105 0.075"/>
       </geometry>
     </visual>
   </link>
@@ -11,9 +11,9 @@
   <link name="servo1_base">
     <visual>
       <geometry>
-        <box size="0.03 0.02 0.05"/>
+        <box size="0.02 0.01 0.03"/>
       </geometry>
-      <origin rpy="0 0 0" xyz="0.1 0 0.05"/>
+      <origin rpy="0 0 0" xyz="0.09 0.0 0.0525"/>
       <material name="blue">
         <color rgba="0 0 .8 1"/>
       </material>
@@ -23,33 +23,34 @@
   <joint name="base_to_servo1" type="fixed">
     <parent link="base_link"/>
     <child link="servo1_base"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
   </joint>
 
   <link name="servo1_head">
     <visual>
       <geometry>
-        <box size="0.05 .05 .05"/>
+        <box size="0.03 0.05 0.03"/>
       </geometry>
-      <origin rpy="0 0 0" xyz="0 0 0.05"/>
+      <origin rpy="0 0 0" xyz="0.0 0 0.015"/>
       <material name="grey">
         <color rgba="0.3 0.3 0.3 1"/>
       </material>
     </visual>
   </link>
 
-  <joint name="servo1_base_to_head" type="continuous">
-    <parent link="servo1_base"/>
+  <joint name="base_to_head1" type="continuous">
+    <parent link="base_link"/>
     <child link="servo1_head"/>
-    <origin rpy="0 0 0" xyz="0.1 0 0.05"/>
+    <origin rpy="0 0 0" xyz="0.095 0 0.0675"/>
     <axis xyz="0 0 1"/>
   </joint>
 
   <link name="servo2_head">
     <visual>
       <geometry>
-        <box size="0.1 .1 .05"/>
+        <box size="0.03 0.05 0.03"/>
       </geometry>
-      <origin rpy="0 0 0" xyz="0.05 0 0.0"/>
+      <origin rpy="0 0 0" xyz="0.015 0.0 0.0"/>
       <material name="dark green">
         <color rgba="0.0 0.3 0.3 1"/>
       </material>
@@ -59,7 +60,26 @@
   <joint name="servo1_to_servo2" type="continuous">
     <parent link="servo1_head"/>
     <child link="servo2_head"/>
-    <origin rpy="0 0 0" xyz="0.0 0 0.1"/>
+    <origin rpy="0 0 0" xyz="0.0 0.0 0.03"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <link name="ultraSonic">
+    <visual>
+      <geometry>
+        <box size="0.02 0.05 0.02"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="-0.01 0.0 0.00"/>
+      <material name="white">
+        <color rgba="1 1 1 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="servo1_to_ultraSonic" type="fixed">
+    <parent link="servo1_head"/>
+    <child link="ultraSonic"/>
+    <origin rpy="0 0 0" xyz="0.035 0.0 -0.01"/>
     <axis xyz="0 1 0"/>
   </joint>
 
