@@ -1,0 +1,10 @@
+<launch>
+    <node pkg="rosserial_python" name="rosserial" type="serial_node.py">
+            <param name="port" value="/dev/ttyACM0"/>
+            <param name="baud" value="57600" />
+    </node>
+        <param name="robot_description" command="cat $(find robby_track2)urdf/robby_track2.urdf" />
+        <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
+        <node name="rt_state_publisher" pkg="robby_track2" type="rt_state_publisher" />
+</launch>
+
