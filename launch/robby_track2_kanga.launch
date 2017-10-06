@@ -9,5 +9,7 @@
 
 	<include file="$(find realsense_camera)/launch/r200_nodelet_rgbd.launch"/>
 
+	<include file="$(find robby_track2)/launch/cameraConversion.launch"/>
+
 </launch>
 
