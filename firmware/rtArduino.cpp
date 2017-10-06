@@ -7,6 +7,7 @@
 #include <string.h>
 #include <rosserial_arduino/Adc.h>
 #include <sensor_msgs/Range.h>
+#include <std_msgs/Int32.h>
 
 ros::NodeHandle nh;
 
@@ -49,7 +50,8 @@ unsigned long previousMillisVelocity = 0;
 
 //----------------------  velocity ----------------------
 // velocity
-geometry_msgs::Twist cmd_vel; // target velocity, assumed to be in local reference frame (x: front, y:side, z: top)
+//geometry_msgs::Twist cmd_vel; // target velocity, assumed to be in local reference frame (x: front, y:side, z: top)
+//geometry_msgs::Twist cmd_vel2; // target velocity, assumed to be in local reference frame (x: front, y:side, z: top)
 //geometry_msgs::Twist twist_msg_tracks; // raw track velocity, for debug only
 geometry_msgs::Twist twist_msg_velocity; // estimated robot velocities, linear & angular
 
@@ -73,46 +75,15 @@ const int servoVertPin  = 3;
 int servoHorPos   = 78;
 int servoVertPos  = 100;
 
-//geometry_msgs::Vector3 cmd_servo; // servo position
 
 //----------------------  sonar ----------------------
-const int sonarPin = 12; // pin connection
+//const int sonarPin = 12; // pin connection
 
-sensor_msgs::Range range_msg_sonar; // message, distance from sonar_sensor
-ros::Publisher pub_range("robby_track_1/range", &range_msg_sonar);
+//sensor_msgs::Range range_msg_sonar; // message, distance from sonar_sensor
+//ros::Publisher pub_range("robby_track_1/range", &range_msg_sonar);
+
 
 // ++++++++++++++++++++++++ functions start +++++++++++++++++++++++++
-// veloctiy callback
-void velocityCallback(const geometry_msgs::Twist& vel)
-{
-  cmd_vel = vel;
-}
-
-// subscriber for velocity
-ros::Subscriber<geometry_msgs::Twist> velocity_sub("robby_track_1/cmd_vel", &velocityCallback);
-
-
-void setupMotor()
-{
-  int i;
-  for(i=E1;i<=M1;i++)
-  pinMode(i, OUTPUT);
-}
-
-
-// callback for servo position, multiple subscribesr didnt work yet...
-//void servoCallback(const geometry_msgs::Vector3& cmd_msg)
-//{
-//    cmd_servo = cmd_msg;
-//    servoHorPos = cmd_msg.z;
-//    servoVertPos = cmd_msg.y;
-
-//    servoHor.write(servoHorPos);
-//    servoVert.write(servoVertPos);
-//}
-
-//// subcriber for servo position
-//ros::Subscriber<geometry_msgs::Vector3> subscriberServo("robby_track_1/servo", servoCallback);
 
 // service function translates velocity [m/s] into command for motor
 int voltageFromVelocity (float velocity)
@@ -138,15 +109,14 @@ int voltageFromVelocity (float velocity)
     }
 
 }
-
-void loopMotor()
+// veloctiy callback
+void velocityCallback(const geometry_msgs::Twist& vel)
 {
-
     float vl; // left track velocity [m/s]
     float vr; // right track velocity [m/s]
 
-    vl = cmd_vel.linear.x - trackDistance / 2.0 * cmd_vel.angular.z; // rough estimation only valid for small angles
-    vr = 2.0 * cmd_vel.linear.x - vl; // rough estimation only valid for small angles
+    vl = vel.linear.x - trackDistance / 2.0 * vel.angular.z; // rough estimation only valid for small angles
+    vr = 2.0 * vel.linear.x - vl; // rough estimation only valid for small angles
 
     // left motor actuation
     analogWrite(E1, voltageFromVelocity(vl));
@@ -168,8 +138,35 @@ void loopMotor()
         rightTrackDirection = 1;
         digitalWrite(M2, LOW);
     }
-
 }
+
+// subscriber for velocity
+ros::Subscriber<geometry_msgs::Twist> velocity_sub("robby_track_1/cmd_vel", &velocityCallback);
+
+
+void setupMotor()
+{
+  int i;
+  for(i=E1;i<=M1;i++)
+  pinMode(i, OUTPUT);
+}
+
+
+
+// callback for servo position, multiple subscribesr didnt work yet...
+void servoCallback(const std_msgs::Int32& cmd_msg)
+{
+    servoHorPos = cmd_msg.data/1000; // first three digits are horizontal servo angle
+    servoVertPos = cmd_msg.data - (cmd_msg.data/1000) * 1000;// last three digits are vertical servo angle
+
+    servoHor.write(servoHorPos);
+    servoVert.write(servoVertPos);
+}
+
+// subcriber for servo position
+ros::Subscriber<std_msgs::Int32> subscriberServo("robby_track_1/servo", servoCallback);
+
+
 
 void setupSensor() {
     pinMode(S1, OUTPUT);
@@ -187,6 +184,7 @@ void loopSensor() {
   float dy; // change of distance of robot in y-direction [m] (local reference frame)
   float ds; // change of distance of robot in total [m]
   float dtheta; // change of angle of robot in z-axis [rad] (local reference frame)
+
 
   // count rotations
   // left
@@ -287,58 +285,59 @@ void setupServo() {
 
 
 //++++++++++++++++++ SONAR +++++++++++++++++++++++++
+// removed to make space for servo subscribers, maybe change to leaner datatype and publish proper data type on kanga
 
 
-long microsecondsToCentimeters(long microseconds)
-{
-  // The speed of sound is 340 m/s or 29 microseconds per centimeter.
-  // The ping travels out and back, so to find the distance of the
-  // object we take half of the distance travelled.
-  return microseconds / 29 / 2;
-}
+//long microsecondsToCentimeters(long microseconds)
+//{
+//  // The speed of sound is 340 m/s or 29 microseconds per centimeter.
+//  // The ping travels out and back, so to find the distance of the
+//  // object we take half of the distance travelled.
+//  return microseconds / 29 / 2;
+//}
 
-void loopUltra()
-{
-  // establish variables for duration of the ping,
-  // and the distance result in inches and centimeters:
-  long duration, inches, cm;
+//void loopUltra()
+//{
+//  // establish variables for duration of the ping,
+//  // and the distance result in inches and centimeters:
+//  long duration, inches, cm;
 
-  if (intervalStarted) {
-    // The PING))) is triggered by a HIGH pulse of 2 or more microseconds.
-    // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
-    pinMode(sonarPin, OUTPUT);
-    digitalWrite(sonarPin, LOW);
-    delayMicroseconds(2);
-    digitalWrite(sonarPin, HIGH);
-    delayMicroseconds(15);
-    digitalWrite(sonarPin, LOW);
-    delayMicroseconds(20);
-    // The same pin is used to read the signal from the PING))): a HIGH
-    // pulse whose duration is the time (in microseconds) from the sending
-    // of the ping to the reception of its echo off of an object.
-    pinMode(sonarPin, INPUT);
-    duration = pulseIn(sonarPin, HIGH);
+//  if (intervalStarted) {
+//    // The PING))) is triggered by a HIGH pulse of 2 or more microseconds.
+//    // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
+//    pinMode(sonarPin, OUTPUT);
+//    digitalWrite(sonarPin, LOW);
+//    delayMicroseconds(2);
+//    digitalWrite(sonarPin, HIGH);
+//    delayMicroseconds(15);
+//    digitalWrite(sonarPin, LOW);
+//    delayMicroseconds(20);
+//    // The same pin is used to read the signal from the PING))): a HIGH
+//    // pulse whose duration is the time (in microseconds) from the sending
+//    // of the ping to the reception of its echo off of an object.
+//    pinMode(sonarPin, INPUT);
+//    duration = pulseIn(sonarPin, HIGH);
 
-    // convert the time into a distance
-    cm = microsecondsToCentimeters(duration);
+//    // convert the time into a distance
+//    cm = microsecondsToCentimeters(duration);
 
-    // put data into message
-    range_msg_sonar.radiation_type = sensor_msgs::Range::ULTRASOUND;
-    range_msg_sonar.header.frame_id =  "/ultraSonic"; // frame
-    range_msg_sonar.header.stamp = nh.now(); // time
-    range_msg_sonar.field_of_view = 60.0 / 360 * 3.14; // [rad]
-    range_msg_sonar.min_range = 0.03; // [m]
-    range_msg_sonar.max_range = 4.0; // [m]
-    range_msg_sonar.range = cm / 100.0; // [m]
-    // publish only if in detection window: how do i do that???
-//    if ((range_msg_sonar.range >= range_msg_sonar.min_range)
-//            &&
-//            (range_msg_sonar.range <= range_msg_sonar.max_range)) {
-        pub_range.publish(&range_msg_sonar);
+//    // put data into message
+//    range_msg_sonar.radiation_type = sensor_msgs::Range::ULTRASOUND;
+//    range_msg_sonar.header.frame_id =  "/ultraSonic"; // frame
+//    range_msg_sonar.header.stamp = nh.now(); // time
+//    range_msg_sonar.field_of_view = 60.0 / 360 * 3.14; // [rad]
+//    range_msg_sonar.min_range = 0.03; // [m]
+//    range_msg_sonar.max_range = 4.0; // [m]
+//    range_msg_sonar.range = cm / 100.0; // [m]
+//    // publish only if in detection window: how do i do that???
+////    if ((range_msg_sonar.range >= range_msg_sonar.min_range)
+////            &&
+////            (range_msg_sonar.range <= range_msg_sonar.max_range)) {
+//        pub_range.publish(&range_msg_sonar);
 
-//    }
-  }
-}
+////    }
+//  }
+//}
 
 
 // +++++++++++++++++++++++++ main loop +++++++++++++++++++++++++++++++++++++++++++
@@ -354,9 +353,9 @@ void setup()
   //  nh.advertise(pub_velocitySensorRaw);
   //nh.advertise(pub_velocityTracks);
   nh.advertise(pub_velocity);
-  nh.advertise(pub_range);
+//  nh.advertise(pub_range);
   // subscribe
-  //nh.subscribe(subscriberServo);
+  nh.subscribe(subscriberServo);
   nh.subscribe(velocity_sub);
 }
 
@@ -371,9 +370,8 @@ void loop()
       numIntervals++;
     }
 
-  loopMotor();
   loopSensor();
-  loopUltra();
+ // loopUltra();
 
   // end
   intervalStarted = false;
