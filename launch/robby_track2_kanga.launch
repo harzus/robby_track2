@@ -6,5 +6,8 @@
         <param name="robot_description" command="cat $(find robby_track2)urdf/robby_track2.urdf" />
         <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
         <node name="rt_state_publisher" pkg="robby_track2" type="rt_state_publisher" />
+
+	<include file="$(find realsense_camera)/launch/r200_nodelet_rgbd.launch"/>
+
 </launch>
 
