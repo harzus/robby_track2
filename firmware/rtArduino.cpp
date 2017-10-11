@@ -37,7 +37,7 @@ int rawsensorValue2 = 0; // variable to store the value coming from the sensor
 //int sensorMax1 = 0;// only for debug
 //int sensorMax2 = 0;// only for debug
 int sensorSwitch1 = 700; // initial guess for sensor switch
-int sensorSwitch2 = 790; // initial guess for sensor switch
+int sensorSwitch2 = 800; // initial guess for sensor switch
 int sensorcount10 = 0;
 int sensorcount11 = 0;
 long count1 = 0; // left count of sensor state changes
@@ -50,16 +50,12 @@ unsigned long previousMillisVelocity = 0;
 
 //----------------------  velocity ----------------------
 // velocity
-//geometry_msgs::Twist cmd_vel; // target velocity, assumed to be in local reference frame (x: front, y:side, z: top)
-//geometry_msgs::Twist cmd_vel2; // target velocity, assumed to be in local reference frame (x: front, y:side, z: top)
-//geometry_msgs::Twist twist_msg_tracks; // raw track velocity, for debug only
+geometry_msgs::Twist twist_msg_tracks; // raw track velocity, for debug only
 geometry_msgs::Twist twist_msg_velocity; // estimated robot velocities, linear & angular
 
 
 // velocity sensors
 // if everything is published at the same time arduino will run out of memery
-//rosserial_arduino::Adc adc_msg; // raw sensor data, for debug only
-//ros::Publisher pub_velocitySensorRaw("robby_track_1/velocitySensorRaw", &adc_msg); // for debug only
 //ros::Publisher pub_velocityTracks("robby_track_1/velocityTracks", &twist_msg_tracks); // for debug only
 ros::Publisher pub_velocity("robby_track_1/velocity", &twist_msg_velocity);
 
@@ -74,7 +70,7 @@ Servo servoVert;  // create servo object to control a servo
 const int servoHorPin   = 9;
 const int servoVertPin  = 3;
 int servoHorPos   = 78;
-int servoVertPos  = 100;
+int servoVertPos  = 95;
 
 
 //----------------------  sonar ----------------------
@@ -211,31 +207,7 @@ void loopSensor() {
   }
   sensorcount20 = sensorcount21;
 
-//  // min / max
-//  if (rawsensorValue1 > sensorMax1) {
-//    sensorMax1 = rawsensorValue1;
-//  }
-//  if (rawsensorValue2> sensorMax2) {
-//    sensorMax2 = rawsensorValue2;
-//  }
-//  if (rawsensorValue1 < sensorMin1) {
-//    sensorMin1 = rawsensorValue1;
-//  }
-//  if (rawsensorValue2 < sensorMin2) {
-//    sensorMin2 = rawsensorValue2;
-//  }
-  // data raw
-//  adc_msg.adc0 = sensorMax1 - sensorMin1;
-//  adc_msg.adc1 = rawsensorValue1;
-//  adc_msg.adc2 = count1;
-//  adc_msg.adc3 = sensorMax2 - sensorMin2;
-//  adc_msg.adc4 = rawsensorValue2;
-//  adc_msg.adc5 = count2;
-//  // data raw publish
-//  pub_velocitySensorRaw.publish(&adc_msg);
-
-
-  // calculation of velocities
+  // calculation of velocitie
   if (intervalStarted) {
       // time
       unsigned long currentMillisVelocity = millis();
@@ -243,12 +215,10 @@ void loopSensor() {
       unsigned long timeDelta = currentMillisVelocity-previousMillisVelocity; // [millis s]
       velocityLeft = leftTrackDirection * (count1-count1old)/20.0 / (timeDelta / 1000.0); // rps
       velocityRight = rightTrackDirection * (count2-count2old)/20.0 / (timeDelta / 1000.0); // rps
-//      twist_msg_tracks.linear.x = velocityLeft  * wheelDiameter * 3.14159265359 ;// [m/s]
-//      twist_msg_tracks.linear.y = velocityRight  * wheelDiameter * 3.14159265359 ;// [m/s]
-//      twist_msg_tracks.linear.z = rawsensorValue1 ;// []
-//      twist_msg_tracks.angular.x = velocityLeft; // [rps]
-//      twist_msg_tracks.angular.y = velocityRight; // [rps]
-//      twist_msg_tracks.angular.z = rawsensorValue2; // []
+      twist_msg_tracks.linear.x = velocityLeft  * wheelDiameter * 3.14159265359 ;// [m/s]
+      twist_msg_tracks.linear.y = velocityRight  * wheelDiameter * 3.14159265359 ;// [m/s]
+      twist_msg_tracks.angular.x = velocityLeft; // [rps]
+      twist_msg_tracks.angular.y = velocityRight; // [rps]
       // velocity of robot
       //      dl = twist_msg_tracks.linear.x * (timeDelta / 1000.0); // left track travelled [m]
       //      dr = twist_msg_tracks.linear.y * (timeDelta / 1000.0); // right track travelled [m]
@@ -270,9 +240,14 @@ void loopSensor() {
       count1old = count1;
       count2old = count2;
       // publish
-      //pub_velocityTracks.publish(&twist_msg_tracks);
       pub_velocity.publish(&twist_msg_velocity);
+      
+
   }
+  // publish for debug
+  //twist_msg_tracks.linear.z = rawsensorValue1 ;// []
+  //twist_msg_tracks.angular.z = rawsensorValue2; // []
+  //pub_velocityTracks.publish(&twist_msg_tracks);
 }
 
 // +++++++++++++++++++++++++ SERVOS +++++++++++++++++++++++++++++++++++++++++++
@@ -351,7 +326,6 @@ void setup()
   setupSensor();
   setupServo();
   // advertise
-  //  nh.advertise(pub_velocitySensorRaw);
   //nh.advertise(pub_velocityTracks);
   nh.advertise(pub_velocity);
 //  nh.advertise(pub_range);
