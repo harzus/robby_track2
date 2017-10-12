@@ -36,8 +36,8 @@ int rawsensorValue2 = 0; // variable to store the value coming from the sensor
 //int sensorMin2 = 1000;// only for debug
 //int sensorMax1 = 0;// only for debug
 //int sensorMax2 = 0;// only for debug
-int sensorSwitch1 = 700; // initial guess for sensor switch
-int sensorSwitch2 = 800; // initial guess for sensor switch
+int sensorSwitch1 = 550; // initial guess for sensor switch
+int sensorSwitch2 = 600; // initial guess for sensor switch
 int sensorcount10 = 0;
 int sensorcount11 = 0;
 long count1 = 0; // left count of sensor state changes
@@ -56,7 +56,7 @@ geometry_msgs::Twist twist_msg_velocity; // estimated robot velocities, linear &
 
 // velocity sensors
 // if everything is published at the same time arduino will run out of memery
-//ros::Publisher pub_velocityTracks("robby_track_1/velocityTracks", &twist_msg_tracks); // for debug only
+ros::Publisher pub_velocityTracks("robby_track_1/velocityTracks", &twist_msg_tracks); // for debug only
 ros::Publisher pub_velocity("robby_track_1/velocity", &twist_msg_velocity);
 
 float velocityLeft = 0.0; // angular velocity of left track [rpm]
@@ -151,17 +151,17 @@ void setupMotor()
 
 
 // callback for servo position, multiple subscribesr didnt work yet...
-void servoCallback(const std_msgs::Int32& cmd_msg)
-{
-    servoHorPos = cmd_msg.data/1000; // first three digits are horizontal servo angle
-    servoVertPos = cmd_msg.data - (cmd_msg.data/1000) * 1000;// last three digits are vertical servo angle
+//void servoCallback(const std_msgs::Int32& cmd_msg)
+//{
+//    servoHorPos = cmd_msg.data/1000; // first three digits are horizontal servo angle
+//    servoVertPos = cmd_msg.data - (cmd_msg.data/1000) * 1000;// last three digits are vertical servo angle
 
-    servoHor.write(servoHorPos);
-    servoVert.write(servoVertPos);
-}
+//    servoHor.write(servoHorPos);
+//    servoVert.write(servoVertPos);
+//}
 
-// subcriber for servo position
-ros::Subscriber<std_msgs::Int32> subscriberServo("robby_track_1/servo", servoCallback);
+//// subcriber for servo position
+//ros::Subscriber<std_msgs::Int32> subscriberServo("robby_track_1/servo", servoCallback);
 
 
 
@@ -245,9 +245,9 @@ void loopSensor() {
 
   }
   // publish for debug
-  //twist_msg_tracks.linear.z = rawsensorValue1 ;// []
-  //twist_msg_tracks.angular.z = rawsensorValue2; // []
-  //pub_velocityTracks.publish(&twist_msg_tracks);
+  twist_msg_tracks.linear.z = rawsensorValue1 ;// []
+  twist_msg_tracks.angular.z = rawsensorValue2; // []
+  pub_velocityTracks.publish(&twist_msg_tracks);
 }
 
 // +++++++++++++++++++++++++ SERVOS +++++++++++++++++++++++++++++++++++++++++++
@@ -326,11 +326,11 @@ void setup()
   setupSensor();
   setupServo();
   // advertise
-  //nh.advertise(pub_velocityTracks);
+  nh.advertise(pub_velocityTracks);
   nh.advertise(pub_velocity);
 //  nh.advertise(pub_range);
   // subscribe
-  nh.subscribe(subscriberServo);
+  //nh.subscribe(subscriberServo);
   nh.subscribe(velocity_sub);
 }
 
