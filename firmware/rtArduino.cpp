@@ -34,7 +34,7 @@ int rightTrackDirection; // direction of left track, 1=forward, -1=backward)
 int rawsensorValue1 = 0; // variable to store the value coming from the sensor
 int rawsensorValue2 = 0; // variable to store the value coming from the sensor
 // sensor messages
-robby_track2::pwmDirectional2 sensor_msg; // outoging sensor signal
+robby_track2::pwmDirectional2 sensor_msg; // outgoing sensor signal
 ros::Publisher pub_sensor_tracks("robby_track_1/sensor_tracks", &sensor_msg);
 
 //----------------------  Servos ----------------------
@@ -213,5 +213,6 @@ void loop()
   // end
   intervalStarted = false;
   nh.spinOnce();
-  delay(1);
+  // not too fast, otherwise buffer overflow
+  delay(10);
 }
