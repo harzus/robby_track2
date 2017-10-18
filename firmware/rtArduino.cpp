@@ -6,7 +6,6 @@
 #include <string.h>
 #include <rosserial_arduino/Adc.h>
 #include <sensor_msgs/Range.h>
-#include <std_msgs/Int32.h>
 #include <robby_track2/pwmDirectional2.h>
 
 ros::NodeHandle nh;
@@ -42,7 +41,7 @@ Servo servoHor;  // create servo object to control a servo
 Servo servoVert;  // create servo object to control a servo
 const int servoHorPin   = 9;
 const int servoVertPin  = 3;
-int servoHorPos   = 78;
+int servoHorPos   = 74;
 int servoVertPos  = 95;
 
 
@@ -110,16 +109,16 @@ void loopSensor() {
 // +++++++++++++++++++++++++ SERVOS +++++++++++++++++++++++++++++++++++++++++++
 
 // callback for servo position, multiple subscribesr didnt work yet...
-void servoCallback(const std_msgs::Int32& cmd_msg)
+void servoCallback(const robby_track2::pwmDirectional2& cmd_msg)
 {
-    servoHorPos = cmd_msg.data/1000; // first three digits are horizontal servo angle
-    servoVertPos = cmd_msg.data - (cmd_msg.data/1000) * 1000;// last three digits are vertical servo angle
+    servoHorPos = cmd_msg.pwmDirection1;
+    servoVertPos = cmd_msg.pwmDirection2;
 
     servoHor.write(servoHorPos);
     servoVert.write(servoVertPos);
 }
 // subcriber for servo position
-ros::Subscriber<std_msgs::Int32> subscriberServo("robby_track_1/servo", servoCallback);
+ros::Subscriber<robby_track2::pwmDirectional2> subscriberServo("robby_track_1/servo_corr", servoCallback);
 
 // setup
 void setupServo() {

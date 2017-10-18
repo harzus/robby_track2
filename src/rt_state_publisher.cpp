@@ -5,6 +5,7 @@
 #include <tf/tf.h>
 #include <geometry_msgs/Twist.h>
 #include "std_msgs/String.h"
+#include "std_msgs/Int32.h"
 #include <nav_msgs/Odometry.h>
 #include <algorithm>
 #include <robby_track2/pwmDirectional2.h>
@@ -125,6 +126,59 @@ long SensorWheel::getStateChanges()
   return wheel_state_.getStateChanges();
 }
 
+class ServoControl
+{
+  public:
+    // constructor
+    ServoControl (const int min_pos, const int max_pos, const int offset);
+    // set target angle
+    void setTarget(const int target);
+    // get corrected angle for servo [°]
+    int correctedServo();
+    // get corrected target for servo [rad]
+    double correctedTarget();
+  private:
+    int min_pos_; // minimum allowed postion [°]
+    int max_pos_; // maximum allowed postion [°]
+    int offset_; // offset [°]
+    int target_; // target angle  [°]
+    int internal_target_; // internal target angle corrected with constraints [°]
+};
+
+void ServoControl::setTarget(const int target)
+{
+  target_ = target;
+  // convert to internal target, watching limits
+  internal_target_ = std::max(std::min(offset_ + target, max_pos_), min_pos_);
+}
+
+int ServoControl::correctedServo()
+{
+  return internal_target_;
+}
+
+double ServoControl::correctedTarget()
+{
+  int corrected_target;
+
+  // check for changes
+  corrected_target = internal_target_ - offset_;
+
+  // return in rad
+  return double(corrected_target) / 180.0 * M_PI;
+}
+
+
+ServoControl::ServoControl (const int min_pos, const int max_pos, const int offset)
+{
+  min_pos_ = min_pos;
+  max_pos_ = max_pos;
+  offset_ = offset;
+  setTarget(0);
+}
+
+
+
 class RobbyTrack
 {
   public:
@@ -146,26 +200,43 @@ class RobbyTrack
     max_voltage_(max_voltage),
     min_velocity_(min_velocity),
     max_velocity_(max_velocity),
-    track_distance_(track_distance)
+    track_distance_(track_distance),
+    servoHor_(10, 150, 74),
+    servoVert_(10, 115, 95)
     {
       odom_trans_.header.frame_id = "odom";
       odom_trans_.child_frame_id = "base_link";
       cmd_vel_received_ = false;
+      servo_received_ = true;
       sign_left_ = 1;
       sign_right_ = 1;
     }
-    bool cmd_vel_received_; // true, if command velocity just received
-    void velocityCallback(const geometry_msgs::Twist& vel); // velocity callback for command velocity
-    void sensorCallback(const robby_track2::pwmDirectional2& msg); // sensor callback for sensor wheel information
+    // true, if command velocity just received
+    bool cmd_vel_received_; 
+    // true, if servo command just received
+    bool servo_received_; 
+    // velocity callback for command velocity
+    void velocityCallback(const geometry_msgs::Twist& vel); 
+    // sensor callback for sensor wheel information
+    void sensorCallback(const robby_track2::pwmDirectional2& msg);
+    // callback for servo position
+    void servoCallback(const robby_track2::pwmDirectional2& msg);
     // estimation of position & velocity from wheel sensors
     void updateJointsAndOdom(const double dT, ros::Time current_time);
-    geometry_msgs::TransformStamped& odom_trans() {return odom_trans_;}; // get odom_trans
-    sensor_msgs::JointState& joint_state() {return joint_state_;}; // get joint_state
-    nav_msgs::Odometry& odom() {return odom_;} ; // get odom
-    robby_track2::pwmDirectional2& pwm() {return pwm_;} ; // get odom
+    // get odom_trans
+    geometry_msgs::TransformStamped& odom_trans() {return odom_trans_;}; 
+    // get joint_state
+    sensor_msgs::JointState& joint_state() {return joint_state_;}; 
+    // get odom
+    nav_msgs::Odometry& odom() {return odom_;} ; 
+    // get odom
+    robby_track2::pwmDirectional2& pwm() {return pwm_;} ; 
+    // get state changes for debug
     robby_track2::pwmDirectional2& getStateChanges() {
       return sensorStateChanges_;
-    } ; // get state changes for debug
+    } ; 
+    // get servo_sent
+    robby_track2::pwmDirectional2& servo_sent() {return servo_sent_;} ; 
   private:
     // absolute position
     double x_; // absolute x-position [m]
@@ -179,6 +250,7 @@ class RobbyTrack
     nav_msgs::Odometry odom_;  // odometry information
     robby_track2::pwmDirectional2 pwm_; // pwm command for for motors
     robby_track2::pwmDirectional2 sensorStateChanges_; // debug, returns number of state changes
+    robby_track2::pwmDirectional2 servo_sent_; // servo message to be sent, correct by zero-offset
     // wheels
     SensorWheel wheel_left_; // left wheel
     SensorWheel wheel_right_; // right wheel
@@ -191,6 +263,9 @@ class RobbyTrack
     const double max_velocity_;  // for tracks in [m/s]
     // tracks
     const double track_distance_; // distance between tracks [m]
+    // servos
+    ServoControl servoHor_; // horizontal servo
+    ServoControl servoVert_; // vertical servo
     // functions
     int voltageFromVelocity (const double velocity); // returns voltage level for desired velocity
 };
@@ -212,7 +287,6 @@ int RobbyTrack::voltageFromVelocity (const double velocity)
   }
 }
 
-// veloctiy callback for command velocity
 void RobbyTrack::velocityCallback(const geometry_msgs::Twist& vel)
 {
   double track_velocity_left; // left track velocity [m/s]
@@ -267,6 +341,18 @@ void RobbyTrack::sensorCallback(const robby_track2::pwmDirectional2& msg)
   }
 }
 
+void RobbyTrack::servoCallback(const robby_track2::pwmDirectional2& msg)
+{
+  // save message
+  servoHor_.setTarget(msg.pwmDirection1);
+  servoVert_.setTarget(msg.pwmDirection2);
+  // correct offset
+  servo_sent_.pwmDirection1 = servoHor_.correctedServo();
+  servo_sent_.pwmDirection2 = servoVert_.correctedServo();
+  // set flag
+  servo_received_ = true;
+}
+
 void RobbyTrack::updateJointsAndOdom(const double dT, ros::Time current_time)
 {
   // distances
@@ -282,12 +368,9 @@ void RobbyTrack::updateJointsAndOdom(const double dT, ros::Time current_time)
   double vy = 0.0; // velocity in y [m/s]
   double vth = 0.0; // radial velocity [rad/s]
 
-  // servos
-  double servo1Angle=0;
-
   // calculate robot distance travelled in its coordinate frame
-  dl = double(sign_left_) * wheel_left_.getDistance(); // !!! timing might be not correct with other messages !!!
-  dr = double(sign_right_) * wheel_right_.getDistance(); // !!! timing might be not correct with other messages !!!
+  dl = double(sign_left_) * wheel_left_.getDistance(); 
+  dr = double(sign_right_) * wheel_right_.getDistance(); 
   // debug
   //sensorStateChanges_.pwmDirection1 = double(wheel_left_.wheel_state_.getStateChanges() - wheel_left_.old_num_state_changes_)
   //    / double(wheel_left_.num_cuts_ * 2.0)* wheel_left_.wheel_diameter_*1e6;
@@ -313,9 +396,9 @@ void RobbyTrack::updateJointsAndOdom(const double dT, ros::Time current_time)
   joint_state_.name.resize(2);
   joint_state_.position.resize(2);
   joint_state_.name[0] ="base_to_head1";
-  joint_state_.position[0] = servo1Angle;
+  joint_state_.position[0] = servoHor_.correctedTarget();
   joint_state_.name[1] ="servo1_to_servo2";
-  joint_state_.position[1] = servo1Angle;
+  joint_state_.position[1] = servoVert_.correctedTarget();
 
   //since all odometry is 6DOF we'll need a quaternion created from yaw
   geometry_msgs::Quaternion odom_quat = tf::createQuaternionMsgFromYaw(th_);
@@ -369,11 +452,20 @@ int main(int argc, char** argv) {
           &robby_track
           );
 
+    // subscriber for servo position
+    ros::Subscriber servo_sub = nh.subscribe(
+          "/robby_track_1/servo",
+          1000,
+          &RobbyTrack::servoCallback,
+          &robby_track
+          );
+
     // publisher
     ros::Publisher joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 1);
     ros::Publisher odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 50);
     ros::Publisher motor_pub = nh.advertise<robby_track2::pwmDirectional2>("/robby_track_1/motor_pwm", 50);
     ros::Publisher sensor_pub = nh.advertise<robby_track2::pwmDirectional2>("/robby_track_1/sensor_count", 50);
+    ros::Publisher servo_pub = nh.advertise<robby_track2::pwmDirectional2>("/robby_track_1/servo_corr", 50);
     // broadcaster
     tf::TransformBroadcaster odom_broadcaster;
    
@@ -412,6 +504,13 @@ int main(int argc, char** argv) {
         // publish motor voltage
         motor_pub.publish(robby_track.pwm());
         robby_track.cmd_vel_received_ = false;
+      }
+
+      if (robby_track.servo_received_== true)
+      {
+        // publish servo position
+        servo_pub.publish(robby_track.servo_sent());
+        robby_track.servo_received_ = false;
       }
 
       // messages
