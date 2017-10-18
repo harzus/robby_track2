@@ -208,19 +208,27 @@ class RobbyTrack
       odom_trans_.child_frame_id = "base_link";
       cmd_vel_received_ = false;
       servo_received_ = true;
+      servo_automated_ = false;
       sign_left_ = 1;
       sign_right_ = 1;
+      servo_auto_target_.pwmDirection1 = 0;
+      servo_auto_target_.pwmDirection2 = 0;
+      scan_direction_ = 1;
     }
     // true, if command velocity just received
     bool cmd_vel_received_; 
     // true, if servo command just received
     bool servo_received_; 
+    // true, if automatic servo control is activated
+    bool servo_automated_;
     // velocity callback for command velocity
     void velocityCallback(const geometry_msgs::Twist& vel); 
     // sensor callback for sensor wheel information
     void sensorCallback(const robby_track2::pwmDirectional2& msg);
     // callback for servo position
     void servoCallback(const robby_track2::pwmDirectional2& msg);
+    // automatically move servo for scan
+    void scanServo();
     // estimation of position & velocity from wheel sensors
     void updateJointsAndOdom(const double dT, ros::Time current_time);
     // get odom_trans
@@ -251,6 +259,7 @@ class RobbyTrack
     robby_track2::pwmDirectional2 pwm_; // pwm command for for motors
     robby_track2::pwmDirectional2 sensorStateChanges_; // debug, returns number of state changes
     robby_track2::pwmDirectional2 servo_sent_; // servo message to be sent, correct by zero-offset
+    robby_track2::pwmDirectional2 servo_auto_target_; // automatic servo target
     // wheels
     SensorWheel wheel_left_; // left wheel
     SensorWheel wheel_right_; // right wheel
@@ -266,6 +275,8 @@ class RobbyTrack
     // servos
     ServoControl servoHor_; // horizontal servo
     ServoControl servoVert_; // vertical servo
+    robby_track2::pwmDirectional2 servos_auto_target_; // current target in automatic mode
+    int scan_direction_; // scan direction of servo in automatic mode
     // functions
     int voltageFromVelocity (const double velocity); // returns voltage level for desired velocity
 };
@@ -343,9 +354,46 @@ void RobbyTrack::sensorCallback(const robby_track2::pwmDirectional2& msg)
 
 void RobbyTrack::servoCallback(const robby_track2::pwmDirectional2& msg)
 {
+  // check for automated modus
+  if ((msg.pwmDirection1 == 999) || (msg.pwmDirection2 == 999))
+  {
+    servo_automated_ = true;
+  } else {
+    servo_automated_ = false;
+  } 
+
+  if (not servo_automated_)
+  {
+    // save message
+    servoHor_.setTarget(msg.pwmDirection1);
+    servoVert_.setTarget(msg.pwmDirection2);
+    // correct offset
+    servo_sent_.pwmDirection1 = servoHor_.correctedServo();
+    servo_sent_.pwmDirection2 = servoVert_.correctedServo();
+    // set flag
+    servo_received_ = true;
+  }
+}
+
+void RobbyTrack::scanServo()
+{
+  const int minAngle=-60;
+  const int maxAngle=60;
+
+  if (servo_auto_target_.pwmDirection1 >= maxAngle)
+  {
+    scan_direction_ = -1;
+  }
+  if (servo_auto_target_.pwmDirection1 <= minAngle)
+  {
+    scan_direction_ = 1;
+  }
+  // change direction
+  servo_auto_target_.pwmDirection1 += scan_direction_;
+  // callback
   // save message
-  servoHor_.setTarget(msg.pwmDirection1);
-  servoVert_.setTarget(msg.pwmDirection2);
+  servoHor_.setTarget(servo_auto_target_.pwmDirection1);
+  servoVert_.setTarget(servo_auto_target_.pwmDirection2);
   // correct offset
   servo_sent_.pwmDirection1 = servoHor_.correctedServo();
   servo_sent_.pwmDirection2 = servoVert_.correctedServo();
@@ -494,6 +542,9 @@ int main(int argc, char** argv) {
 
         // debug, publish state changes
         sensor_pub.publish(robby_track.getStateChanges());
+
+        // auto scan
+        if (robby_track.servo_automated_) {robby_track.scanServo();}
 
         // time
         last_time = current_time;
