@@ -130,36 +130,36 @@ class ServoControl
 {
   public:
     // constructor
-    ServoControl (const int min_pos, const int max_pos, const int offset);
+    ServoControl (const double min_pos, const double max_pos, const double offset);
     // set target angle
-    void setTarget(const int target);
+    void setTarget(const double target);
     // get corrected angle for servo [°]
-    int correctedServo();
+    double correctedServo();
     // get corrected target for servo [rad]
     double correctedTarget();
   private:
-    int min_pos_; // minimum allowed postion [°]
-    int max_pos_; // maximum allowed postion [°]
-    int offset_; // offset [°]
-    int target_; // target angle  [°]
-    int internal_target_; // internal target angle corrected with constraints [°]
+    double min_pos_; // minimum allowed postion [°]
+    double max_pos_; // maximum allowed postion [°]
+    double offset_; // offset [°]
+    double target_; // target angle  [°]
+    double internal_target_; // internal target angle corrected with constraints [°]
 };
 
-void ServoControl::setTarget(const int target)
+void ServoControl::setTarget(const double target)
 {
   target_ = target;
   // convert to internal target, watching limits
   internal_target_ = std::max(std::min(offset_ + target, max_pos_), min_pos_);
 }
 
-int ServoControl::correctedServo()
+double ServoControl::correctedServo()
 {
   return internal_target_;
 }
 
 double ServoControl::correctedTarget()
 {
-  int corrected_target;
+  double corrected_target;
 
   // check for changes
   corrected_target = internal_target_ - offset_;
@@ -169,7 +169,7 @@ double ServoControl::correctedTarget()
 }
 
 
-ServoControl::ServoControl (const int min_pos, const int max_pos, const int offset)
+ServoControl::ServoControl (const double min_pos, const double max_pos, const double offset)
 {
   min_pos_ = min_pos;
   max_pos_ = max_pos;
@@ -214,6 +214,12 @@ class RobbyTrack
       servo_auto_target_.pwmDirection1 = 0;
       servo_auto_target_.pwmDirection2 = 0;
       scan_direction_ = 1;
+      odom_.twist.covariance[0] = 0.02; // x-velocity
+      odom_.twist.covariance[7] = 0.02; // y-velocity
+      odom_.twist.covariance[14] = 0; // z-velocity
+      odom_.twist.covariance[21] = 0; // x-rotational velocity
+      odom_.twist.covariance[28] = 0; // y-rotational velocity
+      odom_.twist.covariance[35] = 1; // z-rotational velocity
     }
     // true, if command velocity just received
     bool cmd_vel_received_; 
@@ -275,7 +281,7 @@ class RobbyTrack
     // servos
     ServoControl servoHor_; // horizontal servo
     ServoControl servoVert_; // vertical servo
-    robby_track2::pwmDirectional2 servos_auto_target_; // current target in automatic mode
+    double servo_auto_target_hor_; // current horizontal target in automatic mode
     int scan_direction_; // scan direction of servo in automatic mode
     // functions
     int voltageFromVelocity (const double velocity); // returns voltage level for desired velocity
@@ -377,26 +383,25 @@ void RobbyTrack::servoCallback(const robby_track2::pwmDirectional2& msg)
 
 void RobbyTrack::scanServo()
 {
-  const int minAngle=-60;
-  const int maxAngle=60;
+  const double minAngle=-60;
+  const double maxAngle=60;
+  const double rate=0.3;
 
-  if (servo_auto_target_.pwmDirection1 >= maxAngle)
+  if (servo_auto_target_hor_ >= maxAngle)
   {
     scan_direction_ = -1;
   }
-  if (servo_auto_target_.pwmDirection1 <= minAngle)
+  if (servo_auto_target_hor_ <= minAngle)
   {
     scan_direction_ = 1;
   }
   // change direction
-  servo_auto_target_.pwmDirection1 += scan_direction_;
+  servo_auto_target_hor_ += double(scan_direction_) * rate;
   // callback
   // save message
-  servoHor_.setTarget(servo_auto_target_.pwmDirection1);
-  servoVert_.setTarget(servo_auto_target_.pwmDirection2);
+  servoHor_.setTarget(servo_auto_target_hor_);
   // correct offset
   servo_sent_.pwmDirection1 = servoHor_.correctedServo();
-  servo_sent_.pwmDirection2 = servoVert_.correctedServo();
   // set flag
   servo_received_ = true;
 }
