@@ -1,10 +1,15 @@
 <launch>
 
-<!--    <node pkg="robby_track2" name="teleop" type="robby_teleop_key"/>
+<!-- old digital control
+<node pkg="robby_track2" name="teleop" type="robby_teleop_key"/>
 -->
     <node pkg="rqt_robot_steering" name="" type="rqt_robot_steering"/>
-    <node pkg="rosserial_python" name="rosserial" type="serial_node.py">
+    <node pkg="rosserial_python" name="firmware" type="serial_node.py">
             <param name="port" value="/dev/ttyACM0"/>
+            <param name="baud" value="57600" />
+    </node>
+    <node pkg="rosserial_python" name="firmwareSensor" type="serial_node.py">
+            <param name="port" value="/dev/ttyACM1"/>
             <param name="baud" value="57600" />
     </node>
 </launch>
