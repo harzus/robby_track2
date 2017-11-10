@@ -1,8 +1,12 @@
 #include <string>
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
-#include <tf/transform_broadcaster.h>
-#include <tf/tf.h>
+//#include <tf/transform_broadcaster.h>
+//#include <tf/tf.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Twist.h>
 #include "std_msgs/String.h"
 #include "std_msgs/Int32.h"
@@ -206,6 +210,8 @@ class RobbyTrack
     {
       odom_trans_.header.frame_id = "odom";
       odom_trans_.child_frame_id = "base_link";
+      odom_.header.frame_id = "odom";
+      odom_.child_frame_id = "base_link";
       cmd_vel_received_ = false;
       servo_received_ = true;
       servo_automated_ = false;
@@ -256,8 +262,6 @@ class RobbyTrack
     double x_; // absolute x-position [m]
     double y_; // absolute y-position [m]
     double th_; // absolute orientation [rad]
-    // broadcaster
-    tf::TransformBroadcaster odom_broadcaster_;  // odom
     // messages
     geometry_msgs::TransformStamped odom_trans_; // transformation of odom
     sensor_msgs::JointState joint_state_; // joint state
@@ -454,27 +458,32 @@ void RobbyTrack::updateJointsAndOdom(const double dT, ros::Time current_time)
   joint_state_.position[1] = servoVert_.correctedTarget();
 
   //since all odometry is 6DOF we'll need a quaternion created from yaw
-  geometry_msgs::Quaternion odom_quat = tf::createQuaternionMsgFromYaw(th_);
+  tf2::Quaternion odom_quat;
+  odom_quat.setRPY(0, 0, th_);
 
   // write to odom
   odom_trans_.header.stamp = current_time;
   odom_trans_.transform.translation.x = x_;
   odom_trans_.transform.translation.y = y_;
   odom_trans_.transform.translation.z = 0.0;
-  odom_trans_.transform.rotation = odom_quat;
+  odom_trans_.transform.rotation.x = odom_quat.x();
+  odom_trans_.transform.rotation.y = odom_quat.y();
+  odom_trans_.transform.rotation.z = odom_quat.z();
+  odom_trans_.transform.rotation.w = odom_quat.w();
 
   //next, we'll publish the odometry message over ROS
   odom_.header.stamp = current_time;
-  odom_.header.frame_id = "odom";
 
   //set the position
   odom_.pose.pose.position.x = x_;
   odom_.pose.pose.position.y = y_;
   odom_.pose.pose.position.z = 0.0;
-  odom_.pose.pose.orientation = odom_quat;
+  odom_.pose.pose.orientation.x = odom_quat.x();
+  odom_.pose.pose.orientation.y = odom_quat.y();
+  odom_.pose.pose.orientation.z = odom_quat.z();
+  odom_.pose.pose.orientation.w = odom_quat.w();
 
   //set the velocity
-  odom_.child_frame_id = "base_link";
   odom_.twist.twist.linear.x = vx;
   odom_.twist.twist.linear.y = vy;
   odom_.twist.twist.angular.z = vth;
@@ -515,13 +524,14 @@ int main(int argc, char** argv) {
 
     // publisher
     ros::Publisher joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 1);
-    ros::Publisher odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 50);
-    ros::Publisher motor_pub = nh.advertise<robby_track2::pwmDirectional2>("/robby_track_1/motor_pwm", 50);
-    ros::Publisher sensor_pub = nh.advertise<robby_track2::pwmDirectional2>("/robby_track_1/sensor_count", 50);
-    ros::Publisher servo_pub = nh.advertise<robby_track2::pwmDirectional2>("/robby_track_1/servo_corr", 50);
+    ros::Publisher odom_pub = nh.advertise<nav_msgs::Odometry>("robby_track_odom0", 50);
+    ros::Publisher motor_pub = nh.advertise<robby_track2::pwmDirectional2>("robby_track_1/motor_pwm", 50);
+    ros::Publisher sensor_pub = nh.advertise<robby_track2::pwmDirectional2>("robby_track_1/sensor_count", 50);
+    ros::Publisher servo_pub = nh.advertise<robby_track2::pwmDirectional2>("robby_track_1/servo_corr", 50);
     // broadcaster
-    tf::TransformBroadcaster odom_broadcaster;
-   
+    //tf::TransformBroadcaster odom_broadcaster;
+    static tf2_ros::TransformBroadcaster odom_broadcaster;
+
     // rate
     ros::Rate loop_rate(30);
 

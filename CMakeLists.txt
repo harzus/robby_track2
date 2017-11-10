@@ -17,6 +17,9 @@ find_package(catkin REQUIRED COMPONENTS
   rostime
   rosconsole
   roslib
+  tf2
+  tf2_geometry_msgs
+  tf2_ros
 )
 
 ## System dependencies are found with CMake's conventions
@@ -111,7 +114,11 @@ add_message_files(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES robby_track2
-  CATKIN_DEPENDS message_runtime
+  CATKIN_DEPENDS 
+    message_runtime
+    tf2
+    tf2_geometry_msgs
+    tf2_ros
 #  DEPENDS system_lib
 )
 
