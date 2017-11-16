@@ -8,12 +8,14 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <geometry_msgs/Twist.h>
+#include <sensor_msgs/Imu.h>
 #include "std_msgs/String.h"
 #include "std_msgs/Int32.h"
 #include <nav_msgs/Odometry.h>
 #include <algorithm>
 #include <robby_track2/pwmDirectional2.h>
 #include <cmath>
+#include "angles/angles.h"
 
 // SchmittTrigger
 class SchmittTrigger 
@@ -208,10 +210,11 @@ class RobbyTrack
     servoHor_(10, 150, 74),
     servoVert_(10, 115, 95)
     {
-      odom_trans_.header.frame_id = "odom";
-      odom_trans_.child_frame_id = "base_link";
-      odom_.header.frame_id = "odom";
-      odom_.child_frame_id = "base_link";
+      odom_trans_.header.frame_id = "odom";     // for transformation
+      odom_trans_.child_frame_id = "base_link"; // for transformation
+      odom_.header.frame_id = "odom";           // for navigation
+      odom_.child_frame_id = "base_link";       // for navigation
+      imu_.header.frame_id = "imu";             // imu
       cmd_vel_received_ = false;
       servo_received_ = true;
       servo_automated_ = false;
@@ -220,12 +223,23 @@ class RobbyTrack
       servo_auto_target_.pwmDirection1 = 0;
       servo_auto_target_.pwmDirection2 = 0;
       scan_direction_ = 1;
+      // odom
       odom_.twist.covariance[0] = 0.02; // x-velocity
       odom_.twist.covariance[7] = 0.02; // y-velocity
       odom_.twist.covariance[14] = 0; // z-velocity
       odom_.twist.covariance[21] = 0; // x-rotational velocity
       odom_.twist.covariance[28] = 0; // y-rotational velocity
       odom_.twist.covariance[35] = 1; // z-rotational velocity
+      // imu
+      imu_.orientation_covariance[0] = angles::from_degrees(2); // x
+      imu_.orientation_covariance[4] = angles::from_degrees(2); // y
+      imu_.orientation_covariance[8] = angles::from_degrees(2); // z
+      imu_.angular_velocity_covariance[0] = angles::from_degrees(2); // x
+      imu_.angular_velocity_covariance[4] = angles::from_degrees(2); // y
+      imu_.angular_velocity_covariance[8] = angles::from_degrees(2); // z
+      imu_.linear_acceleration_covariance[0] = 1; // x
+      imu_.linear_acceleration_covariance[4] = 1; // y
+      imu_.linear_acceleration_covariance[8] = 1; // z
     }
     // true, if command velocity just received
     bool cmd_vel_received_; 
@@ -233,12 +247,18 @@ class RobbyTrack
     bool servo_received_; 
     // true, if automatic servo control is activated
     bool servo_automated_;
+    // true, if imu just received
+    bool imu_received_;
     // velocity callback for command velocity
     void velocityCallback(const geometry_msgs::Twist& vel); 
     // sensor callback for sensor wheel information
     void sensorCallback(const robby_track2::pwmDirectional2& msg);
     // callback for servo position
     void servoCallback(const robby_track2::pwmDirectional2& msg);
+    // callback for quaternion
+    void quaternionCallback(const geometry_msgs::Quaternion& msg);
+    // callback for twist
+    void twistCallback(const geometry_msgs::Twist& msg);
     // automatically move servo for scan
     void scanServo();
     // estimation of position & velocity from wheel sensors
@@ -252,11 +272,11 @@ class RobbyTrack
     // get odom
     robby_track2::pwmDirectional2& pwm() {return pwm_;} ; 
     // get state changes for debug
-    robby_track2::pwmDirectional2& getStateChanges() {
-      return sensorStateChanges_;
-    } ; 
+    robby_track2::pwmDirectional2& getStateChanges() {return sensorStateChanges_;} ;
     // get servo_sent
     robby_track2::pwmDirectional2& servo_sent() {return servo_sent_;} ; 
+    // get imu
+    sensor_msgs::Imu imu() {return imu_;};
   private:
     // absolute position
     double x_; // absolute x-position [m]
@@ -270,6 +290,7 @@ class RobbyTrack
     robby_track2::pwmDirectional2 sensorStateChanges_; // debug, returns number of state changes
     robby_track2::pwmDirectional2 servo_sent_; // servo message to be sent, correct by zero-offset
     robby_track2::pwmDirectional2 servo_auto_target_; // automatic servo target
+    sensor_msgs::Imu imu_; // Imu message
     // wheels
     SensorWheel wheel_left_; // left wheel
     SensorWheel wheel_right_; // right wheel
@@ -384,6 +405,26 @@ void RobbyTrack::servoCallback(const robby_track2::pwmDirectional2& msg)
     servo_received_ = true;
   }
 }
+
+void RobbyTrack::quaternionCallback(const geometry_msgs::Quaternion& msg)
+{
+  imu_.header.stamp = ros::Time::now();
+  imu_.orientation = msg;
+  imu_received_ = true;
+}
+
+void RobbyTrack::twistCallback(const geometry_msgs::Twist& msg)
+{
+  imu_.header.stamp = ros::Time::now();
+  imu_.linear_acceleration.x = msg.linear.x;
+  imu_.linear_acceleration.y = msg.linear.y;
+  imu_.linear_acceleration.z = msg.linear.z;
+  imu_.angular_velocity.x = angles::from_degrees(msg.angular.x);
+  imu_.angular_velocity.y = angles::from_degrees(msg.angular.y);
+  imu_.angular_velocity.z = angles::from_degrees(msg.angular.z);
+  imu_received_ = true;
+}
+
 
 void RobbyTrack::scanServo()
 {
@@ -506,7 +547,7 @@ int main(int argc, char** argv) {
           &robby_track
           );
 
-    // subscriber for track sensros from arduino
+    // subscriber for track sensors from arduino
     ros::Subscriber track_sub = nh.subscribe(
           "/robby_track_1/sensor_tracks",
           1000,
@@ -522,12 +563,30 @@ int main(int argc, char** argv) {
           &robby_track
           );
 
+    // subscriber for quaternion
+    ros::Subscriber quat_sub = nh.subscribe(
+          "robby_track_1/quaternion",
+          1000,
+          &RobbyTrack::quaternionCallback,
+          &robby_track
+          );
+
+    // subscriber for twist with linear acceleration & angular velocity
+    ros::Subscriber twist_sub = nh.subscribe(
+          "robby_track_1/twist",
+          1000,
+          &RobbyTrack::twistCallback,
+          &robby_track
+          );
+
+
     // publisher
     ros::Publisher joint_pub = nh.advertise<sensor_msgs::JointState>("joint_states", 1);
-    ros::Publisher odom_pub = nh.advertise<nav_msgs::Odometry>("robby_track_odom0", 50);
+    ros::Publisher odom_pub = nh.advertise<nav_msgs::Odometry>("robby_track_1_odom0", 50);
     ros::Publisher motor_pub = nh.advertise<robby_track2::pwmDirectional2>("robby_track_1/motor_pwm", 50);
     ros::Publisher sensor_pub = nh.advertise<robby_track2::pwmDirectional2>("robby_track_1/sensor_count", 50);
     ros::Publisher servo_pub = nh.advertise<robby_track2::pwmDirectional2>("robby_track_1/servo_corr", 50);
+    ros::Publisher imu_pub = nh.advertise<sensor_msgs::Imu>("robby_track_1_imu0", 50);
     // broadcaster
     //tf::TransformBroadcaster odom_broadcaster;
     static tf2_ros::TransformBroadcaster odom_broadcaster;
@@ -550,7 +609,7 @@ int main(int argc, char** argv) {
 
         //send the joint state and transform
         joint_pub.publish(robby_track.joint_state());
-        odom_broadcaster.sendTransform(robby_track.odom_trans());
+        //odom_broadcaster.sendTransform(robby_track.odom_trans());
 
         //publish the message
         odom_pub.publish(robby_track.odom());
@@ -565,18 +624,25 @@ int main(int argc, char** argv) {
         last_time = current_time;
       }
       
+      // publish motor voltage
       if (robby_track.cmd_vel_received_== true)
       {
-        // publish motor voltage
         motor_pub.publish(robby_track.pwm());
         robby_track.cmd_vel_received_ = false;
       }
 
+      // publish servo position
       if (robby_track.servo_received_== true)
       {
-        // publish servo position
         servo_pub.publish(robby_track.servo_sent());
         robby_track.servo_received_ = false;
+      }
+
+      // publish imu
+      if (robby_track.imu_received_ == true)
+      {
+        imu_pub.publish(robby_track.imu());
+        robby_track.imu_received_ = false;
       }
 
       // messages

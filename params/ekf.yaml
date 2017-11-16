@@ -6,7 +6,7 @@ frequency: 30
 # The period, in seconds, after which we consider a sensor to have timed out. In this event, we carry out a predict
 # cycle on the EKF without correcting it. This parameter can be thought of as the minimum frequency with which the
 # filter will generate new output. Defaults to 1 / frequency if not specified.
-sensor_timeout: 0.1
+sensor_timeout: 0.03
 
 # ekf_localization_node and ukf_localization_node both use a 3D omnidirectional motion model. If this parameter is
 # set to true, no 3D information will be used in your state estimate. Use this if you are operating in a planar
@@ -23,7 +23,7 @@ transform_time_offset: 0.0
 # Defaults to 0.0 if unspecified.
 transform_timeout: 0.0
 
-# If you're having trouble, try setting this to true, and then echo the /diagnostics_agg topic to see if the node is
+# If you're having trouble, try setting this to true, and then echo the /diagnostics_agg topic to see if the node isa
 # unhappy with any settings or data.
 print_diagnostics: true
 
@@ -70,7 +70,7 @@ world_frame: odom           # Defaults to the value of odom_frame if unspecified
 # sensor_msgs/Imu). To add an input, simply append the next number in the sequence to its "base" name, e.g., odom0,
 # odom1, twist0, twist1, imu0, imu1, imu2, etc. The value should be the topic name. These parameters obviously have no
 # default values, and must be specified.
-odom0: robby_track_odom0
+odom0: robby_track_1_odom0
 
 # Each sensor reading updates some or all of the filter's state. These options give you greater control over which
 # values from each measurement are fed to the filter. For example, if you have an odometry message as input, but only
@@ -133,23 +133,23 @@ odom0_twist_rejection_threshold: 1
 #odom1_twist_rejection_threshold: 0.2
 #odom1_nodelay: false
 
-#imu0: example/imu
-#imu0_config: [false, false, false,
-#              true,  true,  true,
-#              false, false, false,
-#              true,  true,  true,
-#              true,  true,  true]
-#imu0_nodelay: false
-#imu0_differential: false
-#imu0_relative: true
-#imu0_queue_size: 5
-#imu0_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
-#imu0_twist_rejection_threshold: 0.8                #
-#imu0_linear_acceleration_rejection_threshold: 0.8  #
+imu0: robby_track_1_imu0
+imu0_config: [false, false, false,
+              true,  true,  true,
+              false, false, false,
+              true,  true,  true,
+              true,  true,  true]
+imu0_nodelay: false
+imu0_differential: false
+imu0_relative: true
+imu0_queue_size: 5
+imu0_pose_rejection_threshold: 0.8                 # Note the difference in parameter names
+imu0_twist_rejection_threshold: 0.8                #
+imu0_linear_acceleration_rejection_threshold: 0.8  #
 
 # [ADVANCED] Some IMUs automatically remove acceleration due to gravity, and others don't. If yours doesn't, please set
 # this to true, and *make sure* your data conforms to REP-103, specifically, that the data is in ENU frame.
-#imu0_remove_gravitational_acceleration: true
+imu0_remove_gravitational_acceleration: false
 
 # [ADVANCED]  The EKF and UKF models follow a standard predict/correct cycle. During prediction, if there is no
 # acceleration reference, the velocity at time t+1 is simply predicted to be the same as the velocity at time t. During
@@ -172,9 +172,9 @@ control_timeout: 0.2
 # Which velocities are being controlled. Order is vx, vy, vz, vroll, vpitch, vyaw.
 control_config: [true, false, false, false, false, true]
 # Places limits on how large the acceleration term will be. Should match your robot's kinematics.
-acceleration_limits: [1.3, 0.0, 0.0, 0.0, 0.0, 3.4]
+acceleration_limits: [10, 0.0, 0.0, 0.0, 0.0, 3.4]
 # Acceleration and deceleration limits are not always the same for robots.
-deceleration_limits: [1.3, 0.0, 0.0, 0.0, 0.0, 4.5]
+deceleration_limits: [10, 0.0, 0.0, 0.0, 0.0, 4.5]
 # If your robot cannot instantaneously reach its acceleration limit, the permitted change can be controlled with these
 # gains
 acceleration_gains: [0.8, 0.0, 0.0, 0.0, 0.0, 0.9]
