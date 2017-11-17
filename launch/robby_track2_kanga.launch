@@ -13,6 +13,14 @@
         <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
         <node name="rt_state_publisher" pkg="robby_track2" type="rt_state_publisher" />
 
+  <node pkg="robot_localization" type="ukf_localization_node" name="ukf_se" clear_params="true">
+    <rosparam command="load" file="$(find robby_track2)/params/ukf.yaml" />
+   <!--  Placeholder for output topic remapping
+    <remap from="odometry/filtered" to=""/>
+     <remap from="accel/filtered" to=""/>
+    -->
+  </node>
+
 	<!-- realsense 
 	<include file="$(find realsense_camera)/launch/r200_nodelet_rgbd.launch"/> 
 
