@@ -223,23 +223,25 @@ class RobbyTrack
       servo_auto_target_.pwmDirection1 = 0;
       servo_auto_target_.pwmDirection2 = 0;
       scan_direction_ = 1;
+      max_vth_= 1 ; // [rad/s] maximum yaw velocity expected, used for covariance
+      max_vy_ = 0.01; // [m/s] maximum y-velocity expected, used for covariance
       // odom
-      odom_.twist.covariance[0] = 0.02; // x-velocity
-      odom_.twist.covariance[7] = 0.02; // y-velocity
+      odom_.twist.covariance[0] = max_velocity_ * 0.1; // x-velocity
+      odom_.twist.covariance[7] = max_vy_ * 0.2; // y-velocity
       odom_.twist.covariance[14] = 0; // z-velocity
       odom_.twist.covariance[21] = 0; // x-rotational velocity
       odom_.twist.covariance[28] = 0; // y-rotational velocity
-      odom_.twist.covariance[35] = 1; // z-rotational velocity
+      odom_.twist.covariance[35] = max_vth_ * 0.2; // z-rotational velocity
       // imu
-      imu_.orientation_covariance[0] = angles::from_degrees(2); // x
-      imu_.orientation_covariance[4] = angles::from_degrees(2); // y
-      imu_.orientation_covariance[8] = angles::from_degrees(2); // z
-      imu_.angular_velocity_covariance[0] = angles::from_degrees(2); // x
-      imu_.angular_velocity_covariance[4] = angles::from_degrees(2); // y
-      imu_.angular_velocity_covariance[8] = angles::from_degrees(2); // z
-      imu_.linear_acceleration_covariance[0] = 1; // x
-      imu_.linear_acceleration_covariance[4] = 1; // y
-      imu_.linear_acceleration_covariance[8] = 1; // z
+      imu_.orientation_covariance[0] = angles::from_degrees(10); // x
+      imu_.orientation_covariance[4] = angles::from_degrees(10); // y
+      imu_.orientation_covariance[8] = angles::from_degrees(10); // z
+      imu_.angular_velocity_covariance[0] = angles::from_degrees(10); // x
+      imu_.angular_velocity_covariance[4] = angles::from_degrees(10); // y
+      imu_.angular_velocity_covariance[8] = angles::from_degrees(10); // z
+      imu_.linear_acceleration_covariance[0] = 2; // x
+      imu_.linear_acceleration_covariance[4] = 2; // y
+      imu_.linear_acceleration_covariance[8] = 2; // z
     }
     // true, if command velocity just received
     bool cmd_vel_received_; 
@@ -301,6 +303,9 @@ class RobbyTrack
     const int max_voltage_; // for motors
     const double min_velocity_; // for tracks in [m/s]
     const double max_velocity_;  // for tracks in [m/s]
+    // max turning velocities
+    double max_vth_; // [rad/s] maximum yaw velocity expected
+    double max_vy_; // [m/s] maximum y-velocity expected
     // tracks
     const double track_distance_; // distance between tracks [m]
     // servos
@@ -428,9 +433,9 @@ void RobbyTrack::twistCallback(const geometry_msgs::Twist& msg)
 
 void RobbyTrack::scanServo()
 {
-  const double minAngle=-60;
-  const double maxAngle=60;
-  const double rate=0.3;
+  const double minAngle=-60; // min angle in automated mode
+  const double maxAngle=60; // max angle in automated mode
+  const double rate=10; // step size of servo in automated mode
 
   if (servo_auto_target_hor_ >= maxAngle)
   {
@@ -519,6 +524,10 @@ void RobbyTrack::updateJointsAndOdom(const double dT, ros::Time current_time)
   odom_.pose.pose.position.x = x_;
   odom_.pose.pose.position.y = y_;
   odom_.pose.pose.position.z = 0.0;
+  // corresponding covariance
+  odom_.pose.covariance[0] += dx * 0.05;
+  odom_.pose.covariance[7] += dy * 0.05;
+  // orientation
   odom_.pose.pose.orientation.x = odom_quat.x();
   odom_.pose.pose.orientation.y = odom_quat.y();
   odom_.pose.pose.orientation.z = odom_quat.z();
@@ -528,6 +537,10 @@ void RobbyTrack::updateJointsAndOdom(const double dT, ros::Time current_time)
   odom_.twist.twist.linear.x = vx;
   odom_.twist.twist.linear.y = vy;
   odom_.twist.twist.angular.z = vth;
+  // corresponding covariance, scales with velocity
+  odom_.twist.covariance[0] = max_velocity_ * 0.01 + vx / max_velocity_ * 0.1; // x-velocity
+  odom_.twist.covariance[7] = vy / max_vy_ * 0.2; // y-velocity
+  odom_.twist.covariance[35] = max_vth_ * 0.01 + vth / max_vth_ * 0.2; // z-rotational velocity
 }
 
 // main
@@ -537,7 +550,7 @@ int main(int argc, char** argv) {
     ros::NodeHandle nh;
 
     // robby track
-    RobbyTrack robby_track(10, 0.036, 500, 600, 550, 650, 100, 255, 0.01, 0.1, 0.09);
+    RobbyTrack robby_track(10, 0.0342, 500, 600, 550, 650, 100, 255, 0.01, 0.1, 0.09);
 
     // subscriber for command velocity
     ros::Subscriber velocity_sub = nh.subscribe(
@@ -598,6 +611,7 @@ int main(int argc, char** argv) {
     ros::Time current_time, last_time;
     current_time = ros::Time::now();
     last_time = ros::Time::now();
+    int steps = 0; // counting the number of steps inside time loop
 
     while (ros::ok()) {
       current_time = ros::Time::now();
@@ -618,12 +632,15 @@ int main(int argc, char** argv) {
         sensor_pub.publish(robby_track.getStateChanges());
 
         // auto scan
-        if (robby_track.servo_automated_) {robby_track.scanServo();}
+        if (robby_track.servo_automated_ && (steps % 10 == 0)) {robby_track.scanServo();}
+
+	// steps
+        steps++;
 
         // time
         last_time = current_time;
       }
-      
+
       // publish motor voltage
       if (robby_track.cmd_vel_received_== true)
       {
